@@ -8,9 +8,69 @@
 
 ---
 
-## Sprint 1: Infrastructure & Minimal Service
+## Sprint 1: Skeleton Service & Infrastructure (Parallel Tracks)
 
-### Story 1.1: GitHub Actions CI/CD Pipeline Setup
+**Overview:** Service development and infrastructure setup happen in parallel. Story 1.1-1.2 can start immediately without waiting for Azure infrastructure. Stories 1.3-1.5 run in parallel.
+
+### Story 1.1: Project Setup and Solution Structure
+**Story Points:** 3
+**Priority:** Highest
+
+**Description:**
+Create the foundational .NET solution structure with clean architecture layers.
+
+**Acceptance Criteria:**
+- [ ] Solution created with 4 projects: `SmsService.Api`, `SmsService.Core`, `SmsService.Infrastructure`, `SmsService.Tests`
+- [ ] Project references configured correctly
+- [ ] Basic folder structure established (Models, Interfaces, Services, Repositories)
+- [ ] .gitignore configured for .NET projects
+- [ ] README.md with project overview and setup instructions
+- [ ] Dockerfile and docker-compose.yml included for local development
+- [ ] GitHub repository initialized and pushed
+
+**Technical Notes:**
+- Use .NET 10
+- Follow clean architecture pattern
+- Core should have no external dependencies
+- Api references Infrastructure, Infrastructure references Core
+- Dockerfile: multi-stage build (build stage + runtime stage)
+- docker-compose.yml should enable local dev without Azure
+
+**Dependencies:** None - Start immediately
+
+---
+
+### Story 1.2: Minimal API with Health Check
+**Story Points:** 5
+**Priority:** Highest
+
+**Description:**
+Create a minimal API service that starts quickly with health check endpoints.
+
+**Acceptance Criteria:**
+- [ ] ASP.NET Core minimal API created
+- [ ] `GET /health` endpoint returns `{ "status": "healthy" }` with 200
+- [ ] `GET /health/live` liveness probe (instant response)
+- [ ] `GET /health/ready` readiness probe (checks dependencies when configured)
+- [ ] Service starts and responds in <5 seconds
+- [ ] Structured logging configured (console output, Serilog)
+- [ ] Dependency injection configured
+- [ ] Runs locally with `docker-compose up`
+- [ ] Can run without Azure infrastructure (local development ready)
+
+**Technical Notes:**
+- Health check should be lightweight (cache results for 10 seconds)
+- Ready probe checks: database connection pool, Service Bus connectivity (when integrated)
+- Live probe: always returns 200 (fail-fast only)
+- Use Serilog for structured logging
+- Appsettings.json for configuration (dev, staging, prod)
+- No business logic yet, just infrastructure endpoints
+
+**Dependencies:** Story 1.1 - Can start immediately after
+
+---
+
+### Story 1.3: GitHub Actions CI/CD Pipeline Setup
 **Story Points:** 5
 **Priority:** Highest
 
@@ -33,10 +93,13 @@ Set up GitHub Actions CI/CD pipeline for build, test, and deployment to Azure.
 - Tag images: `acr.azurecr.io/nliven-sms:latest` and `acr.azurecr.io/nliven-sms:${{ github.sha }}`
 - Dev environment deploys automatically on main branch
 - Production requires manual approval
+- Can run in parallel with Story 1.2
+
+**Dependencies:** Story 1.1 - Can start immediately after
 
 ---
 
-### Story 1.2: Terraform Infrastructure - Base Resources
+### Story 1.4: Terraform Infrastructure - Base Resources
 **Story Points:** 8
 **Priority:** Highest
 
@@ -59,10 +122,13 @@ Create Terraform configuration for core Azure resources.
 - Output: ACR URL, Container Apps domain, Key Vault URI
 - Include data sources for existing VNets if applicable
 - Local development: use Terraform Cloud or Azure Storage for state
+- Can be done in parallel with Story 1.2 (service development)
+
+**Dependencies:** None - Can start immediately in parallel with Story 1.2
 
 ---
 
-### Story 1.3: Terraform Infrastructure - Container Apps Deployment
+### Story 1.5: Terraform Infrastructure - Container Apps Deployment
 **Story Points:** 5
 **Priority:** Highest
 
@@ -87,58 +153,7 @@ Create Terraform configuration to deploy service to Azure Container Apps.
 - Scale rule: CPU > 70% triggers scale out
 - Manual scale down to 0 replicas not allowed for reliability
 
----
-
-### Story 1.4: Project Setup and Solution Structure
-**Story Points:** 3
-**Priority:** Highest
-
-**Description:**
-Create the foundational .NET solution structure with clean architecture layers.
-
-**Acceptance Criteria:**
-- [ ] Solution created with 4 projects: `SmsService.Api`, `SmsService.Core`, `SmsService.Infrastructure`, `SmsService.Tests`
-- [ ] Project references configured correctly
-- [ ] Basic folder structure established (Models, Interfaces, Services, Repositories)
-- [ ] .gitignore configured for .NET projects
-- [ ] README.md with project overview and setup instructions
-- [ ] Dockerfile and docker-compose.yml included
-- [ ] GitHub Actions workflow files included
-
-**Technical Notes:**
-- Use .NET 10
-- Follow clean architecture pattern
-- Core should have no external dependencies
-- Api references Infrastructure, Infrastructure references Core
-- Dockerfile: multi-stage build (build stage + runtime stage)
-
----
-
-### Story 1.5: Minimal API with Health Check
-**Story Points:** 5
-**Priority:** Highest
-
-**Description:**
-Create a minimal API service that starts quickly with health check endpoints.
-
-**Acceptance Criteria:**
-- [ ] ASP.NET Core minimal API created
-- [ ] `GET /health` endpoint returns `{ "status": "healthy" }` with 200
-- [ ] `GET /health/live` liveness probe (instant response)
-- [ ] `GET /health/ready` readiness probe (checks dependencies)
-- [ ] Health check includes database connectivity status
-- [ ] Health check includes Service Bus connectivity status
-- [ ] Service starts and responds in <5 seconds
-- [ ] Structured logging configured (console output)
-- [ ] Dependency injection configured
-
-**Technical Notes:**
-- Health check should be lightweight (cache results for 10 seconds)
-- Ready probe checks: database connection pool, Service Bus connectivity
-- Live probe: always returns 200 (fail-fast only)
-- Use Serilog for structured logging
-- Appsettings.json for configuration
-- No business logic in Sprint 1, just infrastructure
+**Dependencies:** Story 1.4 (Terraform base), Story 1.3 (GitHub Actions) - Merges both tracks
 
 ---
 
