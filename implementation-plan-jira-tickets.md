@@ -2,15 +2,94 @@
 
 ## Epic: SMS Notification Service for Order Confirmations
 
-**Epic Description:** Build a vendor-agnostic SMS notification service to send order confirmation messages via Twilio, with support for consent management and provider abstraction.
+**Epic Description:** Build a vendor-agnostic SMS notification service to send order confirmation messages via Twilio, with support for consent management and provider abstraction. Deploy multiple times daily using feature flags in the Order Confirmation service.
 
-**Business Value:** Improve customer experience by providing timely SMS notifications for order confirmations, increasing engagement and reducing support inquiries.
+**Business Value:** Improve customer experience by providing timely SMS notifications for order confirmations, increasing engagement and reducing support inquiries. Enable rapid iteration with feature flags and infrastructure-as-code deployments.
 
 ---
 
-## Sprint 1: Foundation & Database Setup
+## Sprint 1: Infrastructure & Minimal Service
 
-### Story 1.1: Project Setup and Solution Structure
+### Story 1.1: GitHub Actions CI/CD Pipeline Setup
+**Story Points:** 5
+**Priority:** Highest
+
+**Description:**
+Set up GitHub Actions CI/CD pipeline for build, test, and deployment to Azure.
+
+**Acceptance Criteria:**
+- [ ] GitHub Actions workflow created (.github/workflows/)
+- [ ] Build job: dotnet build on every push
+- [ ] Unit test job: dotnet test with coverage reports
+- [ ] Docker build: image tagged with commit SHA
+- [ ] Push to Azure Container Registry (ACR)
+- [ ] Deploy to dev environment (manual approval gate for prod)
+- [ ] Workflow runs in parallel for speed
+- [ ] Coverage threshold enforced (fail if <80%)
+
+**Technical Notes:**
+- Use dotnet 8.0 SDK image
+- Cache NuGet packages between runs
+- Tag images: `acr.azurecr.io/nliven-sms:latest` and `acr.azurecr.io/nliven-sms:${{ github.sha }}`
+- Dev environment deploys automatically on main branch
+- Production requires manual approval
+
+---
+
+### Story 1.2: Terraform Infrastructure - Base Resources
+**Story Points:** 8
+**Priority:** Highest
+
+**Description:**
+Create Terraform configuration for core Azure resources.
+
+**Acceptance Criteria:**
+- [ ] Terraform project structure created (main.tf, variables.tf, outputs.tf)
+- [ ] Resource group variables configured
+- [ ] Azure Container Registry (ACR) resource
+- [ ] Azure Container Apps environment
+- [ ] Key Vault for secrets management
+- [ ] Log Analytics workspace
+- [ ] Variables for dev/prod environments
+- [ ] Terraform state stored in Azure Storage backend
+
+**Technical Notes:**
+- Use modules for reusability
+- Separate dev and prod tfvars files
+- Output: ACR URL, Container Apps domain, Key Vault URI
+- Include data sources for existing VNets if applicable
+- Local development: use Terraform Cloud or Azure Storage for state
+
+---
+
+### Story 1.3: Terraform Infrastructure - Container Apps Deployment
+**Story Points:** 5
+**Priority:** Highest
+
+**Description:**
+Create Terraform configuration to deploy service to Azure Container Apps.
+
+**Acceptance Criteria:**
+- [ ] Container Apps resource configured
+- [ ] Image from ACR integrated
+- [ ] Environment variables for dev/prod
+- [ ] Managed identity for Key Vault access
+- [ ] Liveness and readiness probes configured (health check endpoint)
+- [ ] Ingress configured (HTTPS only)
+- [ ] Min replicas: 1, Max replicas: 3
+- [ ] CPU: 0.5, Memory: 1GB
+- [ ] Application Insights integration
+
+**Technical Notes:**
+- Health check endpoint: `GET /health` (returns 200 if healthy)
+- Liveness probe: /health, 30s interval, 10s timeout
+- Readiness probe: /health, 5s interval
+- Scale rule: CPU > 70% triggers scale out
+- Manual scale down to 0 replicas not allowed for reliability
+
+---
+
+### Story 1.4: Project Setup and Solution Structure
 **Story Points:** 3
 **Priority:** Highest
 
@@ -23,16 +102,72 @@ Create the foundational .NET solution structure with clean architecture layers.
 - [ ] Basic folder structure established (Models, Interfaces, Services, Repositories)
 - [ ] .gitignore configured for .NET projects
 - [ ] README.md with project overview and setup instructions
+- [ ] Dockerfile and docker-compose.yml included
+- [ ] GitHub Actions workflow files included
 
 **Technical Notes:**
 - Use .NET 8.0
 - Follow clean architecture pattern
 - Core should have no external dependencies
 - Api references Infrastructure, Infrastructure references Core
+- Dockerfile: multi-stage build (build stage + runtime stage)
 
 ---
 
-### Story 1.2: Database Schema - SmsConsent Table
+### Story 1.5: Minimal API with Health Check
+**Story Points:** 5
+**Priority:** Highest
+
+**Description:**
+Create a minimal API service that starts quickly with health check endpoints.
+
+**Acceptance Criteria:**
+- [ ] ASP.NET Core minimal API created
+- [ ] `GET /health` endpoint returns `{ "status": "healthy" }` with 200
+- [ ] `GET /health/live` liveness probe (instant response)
+- [ ] `GET /health/ready` readiness probe (checks dependencies)
+- [ ] Health check includes database connectivity status
+- [ ] Health check includes Service Bus connectivity status
+- [ ] Service starts and responds in <5 seconds
+- [ ] Structured logging configured (console output)
+- [ ] Dependency injection configured
+
+**Technical Notes:**
+- Health check should be lightweight (cache results for 10 seconds)
+- Ready probe checks: database connection pool, Service Bus connectivity
+- Live probe: always returns 200 (fail-fast only)
+- Use Serilog for structured logging
+- Appsettings.json for configuration
+- No business logic in Sprint 1, just infrastructure
+
+---
+
+## Sprint 2: Database Schema & Domain Models
+
+### Story 2.1: Database DDL - VenuePhoneNumbers Table
+**Story Points:** 2
+**Priority:** Highest
+
+**Description:**
+Create the database schema for venue phone number assignments.
+
+**Acceptance Criteria:**
+- [ ] SQL migration script created for `VenuePhoneNumbers` table
+- [ ] Columns: Id (PK), VenueId (FK), PhoneNumber, ProviderName, CreatedAt, UpdatedAt
+- [ ] Unique constraint on VenueId + ProviderName
+- [ ] Index on VenueId
+- [ ] Rollback script included
+- [ ] Migration file added to project
+
+**Technical Notes:**
+- Use UNIQUEIDENTIFIER for Id
+- Migration tool: Entity Framework Core Migrations
+- Store in `/src/SmsService.Infrastructure/Migrations/` folder
+- This is DDL-only, no EF entity mapping yet
+
+---
+
+### Story 2.2: Database DDL - SmsConsent Table
 **Story Points:** 2
 **Priority:** Highest
 
@@ -41,19 +176,21 @@ Create the database schema for SMS consent tracking.
 
 **Acceptance Criteria:**
 - [ ] SQL migration script created for `SmsConsent` table
-- [ ] Table includes all columns from design doc (Id, PhoneNumber, Status, etc.)
-- [ ] Index on PhoneNumber created
+- [ ] Columns: Id (PK), VenueId, PhoneNumber, ConsentStatus, CreatedAt, UpdatedAt
+- [ ] Unique constraint on VenueId + PhoneNumber
+- [ ] Index on PhoneNumber
+- [ ] Index on VenueId
 - [ ] Rollback script included
-- [ ] Schema validated against requirements
+- [ ] Migration file added to project
 
 **Technical Notes:**
-- Use UNIQUEIDENTIFIER for Id
 - Status values: 'opted_in', 'opted_out'
-- Include audit timestamps (CreatedAt, UpdatedAt)
+- ConsentStatus column type: VARCHAR(20)
+- Separate DDL from entity mapping (Story 2.5)
 
 ---
 
-### Story 1.3: Database Schema - SmsSendHistory Table
+### Story 2.3: Database DDL - SmsSendHistory Table
 **Story Points:** 2
 **Priority:** Highest
 
@@ -62,42 +199,70 @@ Create the database schema for SMS send history tracking.
 
 **Acceptance Criteria:**
 - [ ] SQL migration script created for `SmsSendHistory` table
-- [ ] Table includes all columns from design doc
-- [ ] Indexes created on OrderId, PhoneNumber, and CreatedAt
+- [ ] Columns: Id (PK), OrderId, VenueId, PhoneNumber, Status, Message, ProviderName, ProviderMessageId, ErrorCode, CreatedAt
+- [ ] Indexes on: OrderId, PhoneNumber, VenueId, CreatedAt
 - [ ] Rollback script included
-- [ ] Schema validated against requirements
+- [ ] Migration file added to project
 
 **Technical Notes:**
 - Status values: 'sent', 'failed', 'skipped_no_consent', 'blocked_opted_out'
-- Include provider tracking (ProviderName, ProviderMessageId)
+- Status column type: VARCHAR(30)
+- Large table expected, optimize indexes for queries
+- Separate DDL from entity mapping (Story 2.4)
 
 ---
 
-## Sprint 2: Core Domain Layer
-
-### Story 2.1: Core Domain Models and DTOs
+### Story 2.4: Core Domain Models and Value Objects
 **Story Points:** 3
 **Priority:** High
 
 **Description:**
-Create all domain models, enums, and DTOs for the SMS service.
+Create all domain models and value objects without EF entity configurations.
 
 **Acceptance Criteria:**
-- [ ] `SmsConsent` entity created
-- [ ] `SmsSendHistory` entity created
+- [ ] `SmsConsent` domain model created (record or class)
+- [ ] `SmsSendHistory` domain model created
+- [ ] `VenuePhoneNumber` domain model created
 - [ ] `SendOrderConfirmationSmsEvent` DTO created
-- [ ] Enums created: `ConsentStatus`, `SendStatus`, `MessageType`
-- [ ] Value objects for PhoneNumber (with validation)
-- [ ] Unit tests for domain model validation
+- [ ] Enums: `ConsentStatus`, `SendStatus`, `ProviderName`
+- [ ] Value objects: `PhoneNumber` with validation
+- [ ] All models have XML documentation
+- [ ] Unit tests for PhoneNumber validation
 
 **Technical Notes:**
-- Use records for immutable DTOs
-- Add phone number format validation
-- Include XML documentation
+- Use records for immutable DTOs (SendOrderConfirmationSmsEvent)
+- Use classes for aggregate roots (SmsConsent, SmsSendHistory)
+- PhoneNumber value object: validate format, length
+- Models should NOT be EF-mapped yet (separation of concerns)
+- Models live in SmsService.Core project
 
 ---
 
-### Story 2.2: Core Interfaces - Repositories
+### Story 2.5: Entity Framework Entity Configurations
+**Story Points:** 3
+**Priority:** High
+
+**Description:**
+Create EF Core entity configurations mapping domain models to database schema.
+
+**Acceptance Criteria:**
+- [ ] DbContext created: `SmsDbContext`
+- [ ] Entity configuration classes created (FluentAPI)
+- [ ] Configurations for: SmsConsent, SmsSendHistory, VenuePhoneNumber
+- [ ] Shadow properties for audit timestamps if needed
+- [ ] Database indexes configured (mirroring DDL)
+- [ ] Relationships configured
+- [ ] DbContext configured in DI container
+
+**Technical Notes:**
+- Use IEntityTypeConfiguration<T> pattern
+- Separate configuration classes in Infrastructure/Data/Configurations/
+- Enable query tracking behavior (ReadOnly for queries, SaveChanges for writes)
+- Connection string from appsettings.json
+
+---
+
+### Story 2.6: Core Interfaces - Repositories
 **Story Points:** 2
 **Priority:** High
 
@@ -105,41 +270,47 @@ Create all domain models, enums, and DTOs for the SMS service.
 Define repository interfaces for data access.
 
 **Acceptance Criteria:**
-- [ ] `IConsentRepository` interface created (CRUD operations)
+- [ ] `IConsentRepository` interface created (CRUD for consent)
 - [ ] `IHistoryRepository` interface created (write + query)
-- [ ] `IOrderRepository` interface created (read-only)
-- [ ] Async method signatures defined
-- [ ] XML documentation on all interfaces
+- [ ] `IOrderRepository` interface created (read-only, external)
+- [ ] All methods are async (CancellationToken support)
+- [ ] XML documentation on all methods
+- [ ] Interfaces in Core project
 
 **Technical Notes:**
-- Follow repository pattern
+- Repository pattern for domain models, not EF entities
+- IOrderRepository queries external shared database
+- Avoid N+1 queries (think about projection)
 - Return domain models, not EF entities
-- Use CancellationToken in async methods
 
 ---
 
-### Story 2.3: Core Interfaces - SMS Provider Abstraction
+### Story 2.7: Core Interfaces - SMS Provider Abstraction
 **Story Points:** 2
 **Priority:** High
 
 **Description:**
-Define the `ISmsProvider` interface for vendor abstraction.
+Define the ISmsProvider interface for vendor abstraction.
 
 **Acceptance Criteria:**
 - [ ] `ISmsProvider` interface created
-- [ ] `SendSmsAsync` method defined with request/response models
-- [ ] `SmsRequest` and `SmsResponse` DTOs created
-- [ ] Provider-agnostic error handling model defined
+- [ ] `SendSmsAsync(request, cancellationToken)` method
+- [ ] `SmsRequest` DTO (PhoneNumber, Message, CallbackUrl, VenueId)
+- [ ] `SmsResponse` DTO (Success, MessageId, ErrorCode, ErrorMessage)
+- [ ] Provider-agnostic error codes (enum)
 - [ ] XML documentation
 
 **Technical Notes:**
-- Interface should be provider-agnostic (no Twilio-specific types)
-- Include phone number, message body, callback URL in request
-- Response should include success/failure and provider message ID
+- Interface in Core project
+- No Twilio-specific types
+- Error codes: Success, InvalidPhone, OptedOut, RateLimited, ProviderError
+- Request/Response in Core/Models/Sms/
 
 ---
 
-### Story 2.4: Consent Service Implementation
+## Sprint 3: Core Services
+
+### Story 3.1: Consent Service Implementation
 **Story Points:** 5
 **Priority:** High
 
@@ -147,22 +318,25 @@ Define the `ISmsProvider` interface for vendor abstraction.
 Implement the consent management service.
 
 **Acceptance Criteria:**
-- [ ] `ConsentService` class created implementing `IConsentService`
-- [ ] `CheckConsentAsync` method validates opt-in status
-- [ ] `RecordOptOutAsync` method updates consent to opted_out
-- [ ] `RecordOptInAsync` method updates consent to opted_in
-- [ ] `CreateInitialConsentAsync` method for checkout flow
+- [ ] `ConsentService` class created in Infrastructure
+- [ ] `CheckConsentAsync(venueId, phoneNumber)` - returns ConsentStatus
+- [ ] `RecordOptOutAsync(venueId, phoneNumber)` - updates to opted_out
+- [ ] `RecordOptInAsync(venueId, phoneNumber)` - updates to opted_in
+- [ ] `CreateInitialConsentAsync(venueId, phoneNumber)` - creates opted_in
+- [ ] Proper error handling (phone not found, validation)
+- [ ] Timestamps updated on write operations
 - [ ] Unit tests with mocked repository (>80% coverage)
-- [ ] Proper logging added
+- [ ] Logging added
 
 **Technical Notes:**
-- Check consent status before allowing SMS send
-- Update timestamps appropriately
-- Handle edge cases (phone not found, duplicate opt-out)
+- Injected via DI
+- Handle race conditions (duplicate opt-out)
+- Log all state changes
+- Consider caching consent checks (Redis future enhancement)
 
 ---
 
-### Story 2.5: Message Template Engine
+### Story 3.2: Message Template Engine
 **Story Points:** 3
 **Priority:** High
 
@@ -171,43 +345,53 @@ Create a simple template engine for formatting SMS messages.
 
 **Acceptance Criteria:**
 - [ ] `MessageTemplateEngine` class created
-- [ ] `FormatOrderConfirmationMessage` method implemented
-- [ ] Template supports placeholders: {CustomerName}, {OrderNumber}, {EventName}, {EventDate}
-- [ ] Message length validation (160 chars for single SMS)
-- [ ] Unit tests for various scenarios
-- [ ] Warning logged if message exceeds single SMS length
+- [ ] `FormatOrderConfirmationMessage(order, customer)` method
+- [ ] Template placeholders: {CustomerName}, {OrderNumber}, {EventName}, {EventDate}
+- [ ] Message length validation (warn if >160 chars)
+- [ ] Unit tests for formatting scenarios
+- [ ] Template stored in appsettings or constants
 
 **Technical Notes:**
-- Keep templates simple (string replacement)
-- Future: consider moving templates to configuration/database
+- Keep templates simple (string.Format or similar)
+- Future: move templates to database
 - Example: "Hi {CustomerName}, your order {OrderNumber} for {EventName} on {EventDate} is confirmed!"
+- Log warning if SMS exceeds single segment length
 
 ---
 
-## Sprint 3: Infrastructure Layer - Data Access
-
-### Story 3.1: Entity Framework DbContext Setup
-**Story Points:** 3
+### Story 3.3: SMS Orchestrator Service
+**Story Points:** 8
 **Priority:** High
 
 **Description:**
-Set up Entity Framework Core with DbContext for SMS service tables.
+Implement the main orchestration logic for processing SMS send requests.
 
 **Acceptance Criteria:**
-- [ ] `SmsDbContext` created with DbSets for SmsConsent and SmsSendHistory
-- [ ] Entity configurations created (fluent API)
-- [ ] Connection string configuration in appsettings
-- [ ] Database migrations working
-- [ ] Integration test verifying database connectivity
+- [ ] `SmsOrchestrator` class created in Core/Services
+- [ ] `ProcessOrderConfirmationAsync(event)` implements full flow
+- [ ] Order validation (fetch order, check if cancelled)
+- [ ] Consent check integration
+- [ ] Message formatting
+- [ ] SMS provider call with error handling
+- [ ] History recording
+- [ ] All error scenarios handled gracefully
+- [ ] Unit tests with mocked dependencies (>80% coverage)
+- [ ] Detailed logging at each step
 
 **Technical Notes:**
-- Use SQL Server provider
-- Configure entity mappings (column names, types, indexes)
-- Enable query splitting for complex queries
+- This is the domain service orchestrator
+- Follow design doc flow (check consent before publishing event!)
+- Handle all error codes from provider
+- Always complete the message (record even skipped sends)
+- Log correlation ID for tracing
 
 ---
 
-### Story 3.2: Consent Repository Implementation
+---
+
+## Sprint 4: Infrastructure Layer - Data Access
+
+### Story 4.1: Consent Repository Implementation
 **Story Points:** 3
 **Priority:** High
 
@@ -216,19 +400,23 @@ Implement the consent repository using Entity Framework.
 
 **Acceptance Criteria:**
 - [ ] `ConsentRepository` implements `IConsentRepository`
-- [ ] All CRUD operations implemented
-- [ ] `GetByPhoneNumberAsync` method implemented
+- [ ] `GetByPhoneNumberAsync(venueId, phoneNumber)`
+- [ ] `CreateAsync(consent)`
+- [ ] `UpdateAsync(consent)`
+- [ ] `DeleteAsync(id)`
 - [ ] Proper error handling for database exceptions
-- [ ] Integration tests with in-memory database
+- [ ] Integration tests with real database (Testcontainers)
+- [ ] Async/await throughout
 
 **Technical Notes:**
-- Use async/await throughout
-- Add retry policy for transient failures
-- Log all database operations
+- Use async database calls
+- Add retry logic for transient failures (Polly)
+- Map domain model to EF entity
+- Enable query tracking appropriately
 
 ---
 
-### Story 3.3: History Repository Implementation
+### Story 4.2: SmsSendHistory Repository Implementation
 **Story Points:** 2
 **Priority:** High
 
@@ -236,18 +424,22 @@ Implement the consent repository using Entity Framework.
 Implement the history repository for audit tracking.
 
 **Acceptance Criteria:**
-- [ ] `HistoryRepository` implements `IHistoryRepository`
-- [ ] `CreateAsync` method for recording sends
-- [ ] Query methods: `GetByOrderIdAsync`, `GetByPhoneNumberAsync`, `GetRecentAsync`
+- [ ] `SmsSendHistoryRepository` implements `IHistoryRepository`
+- [ ] `CreateAsync(history)` - write send record
+- [ ] `GetByOrderIdAsync(orderId)` - query by order
+- [ ] `GetByPhoneNumberAsync(phoneNumber)` - query by phone
+- [ ] `GetByVenueIdAsync(venueId, dateRange)` - compliance queries
 - [ ] Integration tests
+- [ ] Paging support for large result sets
 
 **Technical Notes:**
 - Write-heavy, optimize for inserts
-- Consider batching for high volume (future)
+- Return domain models, map from EF entities
+- Consider temporal queries (future enhancement)
 
 ---
 
-### Story 3.4: Order Repository (Read-Only)
+### Story 4.3: Order Repository (Read-Only External)
 **Story Points:** 3
 **Priority:** High
 
@@ -255,22 +447,25 @@ Implement the history repository for audit tracking.
 Create read-only repository for accessing shared order and customer data.
 
 **Acceptance Criteria:**
+- [ ] Separate DbContext for external Orders database
 - [ ] `OrderRepository` implements `IOrderRepository`
-- [ ] `GetOrderWithCustomerAsync` method returns order + customer details
-- [ ] Queries only fetch required fields (projection)
-- [ ] Handle cancelled/invalid orders
+- [ ] `GetOrderWithCustomerAsync(orderId)` - fetch order + customer
+- [ ] Projection: fetch only needed fields (OrderNumber, CustomerName, etc.)
+- [ ] Handle missing/cancelled orders (return null)
+- [ ] Use AsNoTracking() for read-only
 - [ ] Integration tests with test data
 
 **Technical Notes:**
-- Access existing Orders and Customers tables (read-only)
-- Use AsNoTracking() for read-only queries
-- Return null if order not found or cancelled
+- Separate DbContext: `OrdersDbContext` (read-only)
+- Connection string from appsettings (Orders.ConnectionString)
+- No write operations in this repository
+- Consider caching for high-volume reads (future)
 
 ---
 
-## Sprint 4: Infrastructure Layer - Twilio Integration
+## Sprint 5: SMS Provider Integration
 
-### Story 4.1: Twilio SMS Provider Implementation
+### Story 5.1: Twilio SMS Provider Implementation
 **Story Points:** 5
 **Priority:** High
 
@@ -279,95 +474,76 @@ Implement the Twilio adapter for sending SMS messages.
 
 **Acceptance Criteria:**
 - [ ] `TwilioSmsProvider` implements `ISmsProvider`
-- [ ] Twilio SDK integrated (Twilio NuGet package)
+- [ ] Twilio NuGet package integrated
 - [ ] `SendSmsAsync` calls Twilio API
-- [ ] Configuration for Account SID, Auth Token, From Number
-- [ ] Error mapping from Twilio error codes to domain errors
+- [ ] Request mapping (phone, message, callback URL)
+- [ ] Response mapping (success, message ID, errors)
+- [ ] Error mapping: 21610 (opted out), 21211 (invalid), 5xx (retry)
 - [ ] Unit tests with mocked Twilio client
-- [ ] Handle rate limiting and retries
+- [ ] Timeout handling (30 second timeout)
+- [ ] Logging for all calls
 
 **Technical Notes:**
-- Map Twilio errors: 21610 (opted out), 21211 (invalid phone), 5xx (retry)
-- Return provider message ID (SID) in response
+- Use Twilio.Sdk NuGet package
+- Map domain error codes to Twilio error codes
 - Set status callback URL for delivery receipts
-- Add circuit breaker for Twilio API failures
+- Add circuit breaker pattern (Polly) for resilience
 
 ---
 
-### Story 4.2: Twilio Configuration and Secrets Management
+### Story 5.2: Twilio Configuration and Secrets Management
 **Story Points:** 2
 **Priority:** High
 
 **Description:**
-Configure Twilio credentials and settings securely.
+Configure Twilio credentials securely using Key Vault.
 
 **Acceptance Criteria:**
-- [ ] Twilio settings in appsettings.json (non-sensitive)
-- [ ] Azure Key Vault integration for secrets (Account SID, Auth Token)
-- [ ] Configuration class `TwilioOptions` created
-- [ ] Validation on startup (fail fast if misconfigured)
-- [ ] Documentation on required settings
+- [ ] TwilioOptions configuration class created
+- [ ] appsettings.json (non-sensitive: AccountSidKey, AuthTokenKey)
+- [ ] Azure Key Vault integration
+- [ ] Managed identity for Key Vault access
+- [ ] Configuration validation on startup (fail fast)
+- [ ] Local development: User Secrets support
+- [ ] Documentation for setting up secrets
 
 **Technical Notes:**
-- Never commit secrets to source control
-- Use managed identity for Key Vault access in Azure
-- Local development: use user secrets or local.settings.json
+- Keys in Key Vault: twilio-account-sid, twilio-auth-token, twilio-from-number
+- Local dev: `dotnet user-secrets set "Twilio:AccountSid" "..."`
+- Production: Terraform manages Key Vault secrets
+- Never commit actual credentials
 
 ---
 
-## Sprint 5: Service Bus Integration
+## Sprint 6: Service Bus Integration
 
-### Story 5.1: Service Bus Message Consumer Setup
+### Story 6.1: Service Bus Message Consumer Setup
 **Story Points:** 5
 **Priority:** High
 
 **Description:**
-Set up Azure Service Bus consumer to receive `SendOrderConfirmationSms` events.
+Set up Azure Service Bus consumer to receive order confirmation SMS events.
 
 **Acceptance Criteria:**
-- [ ] Service Bus connection configured
+- [ ] Service Bus connection configured from appsettings
 - [ ] Topic subscription created for `SendOrderConfirmationSms`
-- [ ] Background service/hosted service created to process messages
-- [ ] Message deserialization working
-- [ ] Dead letter queue configured
-- [ ] Integration test with local Service Bus emulator
+- [ ] Background service: `SendOrderConfirmationSmsConsumer` (HostedService)
+- [ ] Message deserialization (JSON to domain event)
+- [ ] Dead letter queue configured (auto-dead-letter after 3 retries)
+- [ ] Correlation ID propagation
+- [ ] Integration test with Azurite or Service Bus emulator
+- [ ] Graceful shutdown on app shutdown
 
 **Technical Notes:**
 - Use Azure.Messaging.ServiceBus SDK
-- Set max concurrent calls (start with 10)
-- Configure message lock duration (5 minutes)
-- Enable auto-renewal of message lock
+- Max concurrent calls: 10
+- Message lock duration: 5 minutes
+- Auto-lock renewal enabled
+- DLQ subscription created in Terraform
 
 ---
 
-### Story 5.2: SMS Orchestrator Service
-**Story Points:** 8
-**Priority:** High
-
-**Description:**
-Implement the main orchestration logic for processing SMS send requests.
-
-**Acceptance Criteria:**
-- [ ] `SmsOrchestrator` class created
-- [ ] `ProcessOrderConfirmationAsync` method implements full flow from design doc
-- [ ] Order validation (check if cancelled)
-- [ ] Consent check integration
-- [ ] Message templating integration
-- [ ] SMS provider integration
-- [ ] History recording
-- [ ] Proper error handling for all scenarios
-- [ ] Unit tests with mocked dependencies (>80% coverage)
-- [ ] Structured logging at each step
-
-**Technical Notes:**
-- This is the main business logic coordinator
-- Follow the 12-step flow from the architecture doc
-- Handle all error scenarios gracefully
-- Complete message (ack) even on skipped sends
-
----
-
-### Story 5.3: Service Bus Error Handling and Retry Logic
+### Story 6.2: Service Bus Error Handling and Retry Logic
 **Story Points:** 3
 **Priority:** High
 
@@ -375,23 +551,24 @@ Implement the main orchestration logic for processing SMS send requests.
 Implement retry and error handling for Service Bus message processing.
 
 **Acceptance Criteria:**
-- [ ] Retry policy configured for transient failures
+- [ ] Retry policy configured (exponential backoff)
+- [ ] Max retries: 3
+- [ ] Retry delays: 1s, 2s, 4s
 - [ ] Dead letter queue handling for permanent failures
-- [ ] Exponential backoff implemented
-- [ ] Max retry count set (3)
-- [ ] Logging for failed messages
-- [ ] Alert/metric when DLQ depth > 0
+- [ ] Logging for retries and DLQ messages
+- [ ] Metrics: retry attempts, DLQ depth
+- [ ] Alert when DLQ has messages
 
 **Technical Notes:**
-- Retry on Twilio 5xx errors
-- Don't retry on: no consent, invalid phone, opted out
-- Log correlation ID for tracing
+- Transient failures: Twilio 5xx, temporary database errors
+- Non-transient (nack immediately): no consent, opted out, invalid phone
+- Log correlation ID for tracing across retries
 
 ---
 
-## Sprint 6: API Layer - Webhooks & Endpoints
+## Sprint 7: API Layer - Webhooks & Endpoints
 
-### Story 6.1: Twilio Webhook Endpoint - Opt-Out Handling
+### Story 7.1: Twilio Webhook Endpoint - Opt-Out Handling
 **Story Points:** 5
 **Priority:** High
 
@@ -400,44 +577,71 @@ Create webhook endpoint to handle STOP/START messages from Twilio.
 
 **Acceptance Criteria:**
 - [ ] `POST /webhook/twilio` endpoint created
-- [ ] Twilio signature validation middleware implemented
-- [ ] Parse incoming webhook payload (STOP/START)
-- [ ] Call `ConsentService` to update opt-out status
-- [ ] Return 200 OK to Twilio
+- [ ] Twilio request signature validation middleware
+- [ ] X-Twilio-Signature header validation (HMAC-SHA1)
+- [ ] Parse webhook payload (extract STOP/START keywords)
+- [ ] Call ConsentService.RecordOptOutAsync or RecordOptInAsync
+- [ ] Return 200 OK to Twilio immediately
 - [ ] Unit tests with sample Twilio payloads
 - [ ] Integration test
 
 **Technical Notes:**
-- Validate X-Twilio-Signature header
-- Handle "STOP", "UNSTOP", "START" keywords
-- Respond quickly (<5 seconds) to avoid Twilio retry
-- Use async processing if needed
+- Signature validation using Twilio SDK
+- Handle: STOP, START, UNSTOP keywords
+- Respond within 5 seconds (async processing if needed)
+- Log all webhook events
+- Use correlation ID for tracing
 
 ---
 
-### Story 6.2: Consent Query API
+### Story 7.2: Health Check Endpoints
+**Story Points:** 2
+**Priority:** High
+
+**Description:**
+Create health check endpoints for orchestration and monitoring.
+
+**Acceptance Criteria:**
+- [ ] `GET /health` - detailed health check (JSON response)
+- [ ] `GET /health/live` - liveness probe (instant response)
+- [ ] `GET /health/ready` - readiness probe (checks dependencies)
+- [ ] Liveness: always returns 200 (fail-fast only)
+- [ ] Readiness: checks database, Service Bus, Key Vault connectivity
+- [ ] Cache readiness check results (10 second TTL)
+- [ ] Returns 200 if ready, 503 if not
+- [ ] Unit tests
+
+**Technical Notes:**
+- Use ASP.NET Core health checks API
+- Ready checks should be lightweight (cache results)
+- Used by Container Apps liveness/readiness probes
+- Document in Swagger
+
+---
+
+### Story 7.3: Consent Query API (Future - Phase 2)
 **Story Points:** 2
 **Priority:** Medium
 
 **Description:**
-Create API endpoint for querying consent status.
+Create API endpoint for other services to query consent status.
 
 **Acceptance Criteria:**
-- [ ] `GET /api/consent/{phone}` endpoint created
-- [ ] Returns consent status for phone number
-- [ ] Returns 404 if phone not found
+- [ ] `GET /api/consent/{venueId}/{phoneNumber}` endpoint
+- [ ] Returns: { "consentStatus": "opted_in|opted_out" }
+- [ ] Returns 404 if phone not found for venue
 - [ ] Phone number format validation
 - [ ] API documentation (Swagger)
 - [ ] Unit tests
 
 **Technical Notes:**
-- Used by other services to check consent before sending SMS
-- Consider caching for frequently queried numbers
+- Used by Order Confirmation service to check before creating event
+- Consider caching with Redis (future)
 - Add rate limiting
 
 ---
 
-### Story 6.3: SMS History Query API
+### Story 7.4: SMS History Query API (Future - Phase 2)
 **Story Points:** 3
 **Priority:** Medium
 
@@ -445,45 +649,178 @@ Create API endpoint for querying consent status.
 Create API endpoint for querying SMS send history (audit/compliance).
 
 **Acceptance Criteria:**
-- [ ] `GET /api/history` endpoint created with query parameters
-- [ ] Filter by: OrderId, PhoneNumber, DateRange, Status
+- [ ] `GET /api/history` endpoint with query parameters
+- [ ] Filter by: OrderId, PhoneNumber, VenueId, DateRange, Status
 - [ ] Pagination support (page, pageSize)
-- [ ] Returns send history records
+- [ ] Returns send history records with metadata
+- [ ] Authorization check (internal only)
 - [ ] API documentation (Swagger)
 - [ ] Unit tests
 
 **Technical Notes:**
-- Add authorization (internal use only)
+- Compliance queries (for support team)
 - Consider performance for large datasets
-- Add indexes on queried columns
+- Add export to CSV (future)
 
 ---
 
-### Story 6.4: Health Check Endpoints
-**Story Points:** 2
-**Priority:** Medium
+## Sprint 8: Feature Flag Integration
+
+### Story 8.1: Feature Flag Service Setup
+**Story Points:** 3
+**Priority:** High
 
 **Description:**
-Add health check endpoints for monitoring.
+Integrate feature flag service to control SMS flow from Order Confirmation service.
 
 **Acceptance Criteria:**
-- [ ] `/health` endpoint returns service health
-- [ ] Database connectivity check
-- [ ] Service Bus connectivity check
-- [ ] Twilio API connectivity check (optional)
-- [ ] Returns 200 if healthy, 503 if unhealthy
-- [ ] Integration test
+- [ ] Feature flag provider selected (LaunchDarkly, Azure App Configuration, or custom)
+- [ ] Configuration in SmsService for storing flag definitions
+- [ ] `IFeatureFlagService` interface created
+- [ ] `IsOrderConfirmationSmsEnabledAsync(venueId)` method
+- [ ] Flags cached locally (TTL: 5 minutes)
+- [ ] Unit tests for flag resolution
+- [ ] Documentation for enabling/disabling flags per environment
 
 **Technical Notes:**
-- Use ASP.NET Core health checks
-- Don't call external APIs too frequently
-- Used by Azure Container Apps for liveness/readiness probes
+- Supports gradual rollout by venue
+- Order Confirmation service checks flag before publishing event to Service Bus
+- Flag changes propagate within 5 minutes
+- Metrics: when SMS flow is enabled/disabled
 
 ---
 
-## Sprint 7: Observability & Monitoring
+### Story 8.2: Order Confirmation Service Integration (External Story)
+**Story Points:** 5
+**Priority:** High
 
-### Story 7.1: Structured Logging with Application Insights
+**Description:**
+Integrate feature flag check in Order Confirmation service.
+
+**Acceptance Criteria:**
+- [ ] Dependency on Feature Flag service added
+- [ ] Before publishing `SendOrderConfirmationSms` event, check feature flag
+- [ ] If disabled: log and skip SMS event publishing (no error)
+- [ ] If enabled: publish event as normal
+- [ ] Unit tests with flag enabled/disabled scenarios
+- [ ] Metrics: SMS flow enabled/disabled events
+
+**Technical Notes:**
+- No changes to Order Confirmation domain logic
+- Feature flag check is non-blocking (fail-open)
+- Log when SMS flow changes state
+- This is in a separate repository, coordination required
+
+---
+
+## Sprint 9: Docker & Local Development
+
+### Story 9.1: Dockerfile and Docker Compose
+**Story Points:** 3
+**Priority:** High
+
+**Description:**
+Create Dockerfile and docker-compose for development and deployment.
+
+**Acceptance Criteria:**
+- [ ] Dockerfile created with multi-stage build
+- [ ] Build stage: restore, build, test
+- [ ] Runtime stage: minimal runtime image
+- [ ] Health check included in Dockerfile
+- [ ] docker-compose.yml for local development
+- [ ] Includes: SmsService, SQL Server, Service Bus emulator (Azurite)
+- [ ] Environment variables for local development
+- [ ] Volumes for code hot-reload
+- [ ] Docker image builds successfully and runs locally
+
+**Technical Notes:**
+- Base image: mcr.microsoft.com/dotnet/aspnet:8.0
+- Build image: mcr.microsoft.com/dotnet/sdk:8.0
+- Health check: HEALTHCHECK CMD curl -f http://localhost:80/health || exit 1
+- SQL Server image: mcr.microsoft.com/mssql/server:latest
+- Service Bus emulator: Azure Storage emulator (Azurite)
+
+---
+
+### Story 9.2: Development Setup Guide
+**Story Points:** 2
+**Priority:** High
+
+**Description:**
+Create comprehensive developer setup guide.
+
+**Acceptance Criteria:**
+- [ ] README.md with architecture overview
+- [ ] Prerequisites: .NET 8.0 SDK, Docker, Git
+- [ ] Local development setup steps
+- [ ] Run with docker-compose (one command)
+- [ ] Run tests locally
+- [ ] Debugging setup (VS Code, Rider)
+- [ ] How to manage secrets locally (user-secrets)
+- [ ] Troubleshooting common issues
+- [ ] Database migration steps
+
+**Technical Notes:**
+- Keep updated as project evolves
+- Include screenshots of Swagger UI, logs
+- Document default credentials for local dev
+- Include VS Code extensions recommendations
+
+---
+
+## Sprint 10: Testing & Observability
+
+### Story 10.1: Unit Test Suite
+**Story Points:** 5
+**Priority:** High
+
+**Description:**
+Ensure comprehensive unit test coverage across all layers.
+
+**Acceptance Criteria:**
+- [ ] All domain services have unit tests (>80% coverage)
+- [ ] All repositories have unit tests
+- [ ] Controllers have unit tests
+- [ ] Mock all external dependencies (ISmsProvider, IConsentRepository)
+- [ ] xUnit test framework
+- [ ] Moq for mocking
+- [ ] Tests run in CI/CD pipeline
+- [ ] Coverage report generated (OpenCover)
+
+**Technical Notes:**
+- Test happy path and edge cases
+- Use test fixtures for common setup
+- Test error scenarios (provider errors, validation)
+- Fast tests (<1ms per test)
+
+---
+
+### Story 10.2: Integration Test Suite
+**Story Points:** 5
+**Priority:** High
+
+**Description:**
+Create integration tests for end-to-end scenarios.
+
+**Acceptance Criteria:**
+- [ ] Service Bus message processing integration tests
+- [ ] Webhook endpoint integration tests
+- [ ] Database repository integration tests
+- [ ] Use Testcontainers for SQL Server (realistic)
+- [ ] Use in-memory Service Bus for testing
+- [ ] Use WebApplicationFactory for API tests
+- [ ] Tests clean up data after execution
+- [ ] Tests run in CI/CD pipeline (separate from unit tests)
+
+**Technical Notes:**
+- Testcontainers: testcontainers/testcontainers-dotnet
+- Real database interactions (not mocked)
+- Slow tests acceptable (<5 seconds per test)
+- Test failed scenarios and error handling
+
+---
+
+### Story 10.3: Structured Logging with Application Insights
 **Story Points:** 3
 **Priority:** High
 
@@ -492,251 +829,121 @@ Implement comprehensive structured logging throughout the application.
 
 **Acceptance Criteria:**
 - [ ] Application Insights SDK integrated
-- [ ] Structured logging added to all services
+- [ ] Serilog configured for structured logging
 - [ ] Correlation IDs propagated from Service Bus messages
-- [ ] Log levels configured appropriately
-- [ ] Exception tracking configured
-- [ ] Dependency tracking enabled (database, Twilio)
+- [ ] All services log relevant context (OrderId, PhoneNumber, VenueId)
+- [ ] Log levels: Info (normal flow), Warning (retries), Error (failures)
+- [ ] Exception logging with stack traces
+- [ ] PII protection (avoid logging phone numbers, email in production)
 
 **Technical Notes:**
-- Use ILogger throughout
-- Log at appropriate levels (Info, Warning, Error)
-- Include relevant context (OrderId, PhoneNumber, etc.)
-- Avoid logging PII in production
+- Use ILogger<T> throughout
+- Correlation ID in all log entries
+- Azure Monitor integration (Application Insights)
+- Test log output in unit tests
 
 ---
 
-### Story 7.2: Datadog Metrics Integration
+### Story 10.4: Datadog Metrics Integration (Optional)
 **Story Points:** 5
-**Priority:** High
+**Priority:** Medium
 
 **Description:**
 Integrate Datadog for custom metrics tracking.
 
 **Acceptance Criteria:**
 - [ ] Datadog SDK integrated
-- [ ] Metrics implemented from design doc:
-  - `sms.sent.total` (counter by message_type, provider)
-  - `sms.failed.total` (counter by error_code, provider)
+- [ ] Metrics emitted:
+  - `sms.sent.total` (counter)
+  - `sms.failed.total` (counter)
   - `sms.opt_out.total` (counter)
-  - `sms.opt_in.total` (counter)
   - `sms.send.duration` (histogram)
-- [ ] Metrics emitted at appropriate points in code
+- [ ] Metrics tagged: venue_id, provider, error_code
 - [ ] Datadog dashboard created
-- [ ] Documentation on metrics
+- [ ] Alerts configured for critical metrics
 
 **Technical Notes:**
-- Use DogStatsD client
-- Tag metrics with relevant dimensions
-- Monitor metric cardinality
+- Use Datadog.Trace NuGet package
+- Emit metrics at service boundaries
+- Keep cardinality low (avoid unbounded tags)
 
 ---
 
-### Story 7.3: Alerting Configuration
+## Sprint 11: Deployment & Production Readiness
+
+### Story 11.1: Pre-Production Deployment & Testing
+**Story Points:** 5
+**Priority:** High
+
+**Description:**
+Deploy to staging and validate end-to-end functionality.
+
+**Acceptance Criteria:**
+- [ ] Service deployed to staging via Terraform/GitHub Actions
+- [ ] Health checks passing
+- [ ] Manual smoke tests: send test SMS via Twilio
+- [ ] Webhook test: simulate STOP message from Twilio
+- [ ] Database migrations verified
+- [ ] Logs flowing to Application Insights
+- [ ] Metrics flowing to Datadog (if enabled)
+- [ ] Performance tested: send 1000 messages, measure latency
+- [ ] Load test: simulate realistic volume, verify scaling
+
+**Technical Notes:**
+- Use staging Twilio account with test number
+- Monitor logs for any errors
+- Verify telemetry pipeline end-to-end
+- Document any issues found
+
+---
+
+### Story 11.2: Production Deployment Runbook
 **Story Points:** 3
-**Priority:** Medium
+**Priority:** High
+
+**Description:**
+Create operational runbook for deploying to production.
+
+**Acceptance Criteria:**
+- [ ] Deployment steps documented
+- [ ] Rollback procedure documented
+- [ ] Manual approval gate in GitHub Actions
+- [ ] Pre-deployment checklist (tests pass, coverage >80%)
+- [ ] Post-deployment validation steps
+- [ ] Emergency contact information
+- [ ] Link to dashboards and alerts
+- [ ] Common troubleshooting scenarios
+
+**Technical Notes:**
+- Deploy during low-traffic periods initially
+- Use gradual rollout (feature flag)
+- Monitor metrics closely for 30 minutes post-deploy
+- Have rollback plan ready
+
+---
+
+### Story 11.3: Monitoring & Alerting Configuration
+**Story Points:** 3
+**Priority:** High
 
 **Description:**
 Configure alerts for critical service issues.
 
 **Acceptance Criteria:**
-- [ ] Alert for send failure rate > 5%
-- [ ] Alert for webhook signature validation failures
-- [ ] Alert for Twilio API latency > 2s
-- [ ] Alert for dead letter queue depth > 0
-- [ ] Alert routing configured (PagerDuty/Slack)
-- [ ] Alert runbooks created
+- [ ] Alert: send failure rate > 5% (5-minute window)
+- [ ] Alert: webhook signature validation failures > 0
+- [ ] Alert: Service Bus DLQ depth > 0
+- [ ] Alert: API latency p95 > 3 seconds
+- [ ] Alert: database connection pool exhaustion
+- [ ] Alert routing: Slack channel or PagerDuty
+- [ ] Alert runbooks: what to do when alert fires
+- [ ] Dashboard: real-time SMS metrics
 
 **Technical Notes:**
-- Use Datadog or Azure Monitor for alerts
-- Set appropriate thresholds and time windows
-- Include context in alert messages
-- Define escalation paths
-
----
-
-## Sprint 8: Testing & Deployment
-
-### Story 8.1: Unit Test Suite Completion
-**Story Points:** 5
-**Priority:** High
-
-**Description:**
-Ensure comprehensive unit test coverage across all layers.
-
-**Acceptance Criteria:**
-- [ ] All services have unit tests (>80% coverage)
-- [ ] All repositories have unit tests
-- [ ] Controllers have unit tests
-- [ ] Mock all external dependencies
-- [ ] Tests run in CI/CD pipeline
-- [ ] Coverage report generated
-
-**Technical Notes:**
-- Use xUnit and Moq
-- Test happy path and edge cases
-- Use test fixtures for common setup
-
----
-
-### Story 8.2: Integration Test Suite
-**Story Points:** 5
-**Priority:** High
-
-**Description:**
-Create integration tests for end-to-end scenarios.
-
-**Acceptance Criteria:**
-- [ ] Integration tests for Service Bus message processing
-- [ ] Integration tests for webhook endpoints
-- [ ] Integration tests for database operations
-- [ ] Use test containers for SQL Server
-- [ ] Use in-memory Service Bus for testing
-- [ ] Tests run in CI/CD pipeline
-
-**Technical Notes:**
-- Use WebApplicationFactory for API tests
-- Use Testcontainers for database
-- Clean up test data after each test
-
----
-
-### Story 8.3: Docker Configuration
-**Story Points:** 3
-**Priority:** High
-
-**Description:**
-Create Dockerfile and docker-compose for local development and deployment.
-
-**Acceptance Criteria:**
-- [ ] Dockerfile created for SmsService.Api
-- [ ] Multi-stage build configured (build + runtime)
-- [ ] docker-compose.yml for local development (with SQL Server)
-- [ ] Environment variable configuration
-- [ ] Image builds successfully
-- [ ] Container runs locally
-
-**Technical Notes:**
-- Use official .NET 8.0 images
-- Optimize layer caching
-- Include health check in container
-
----
-
-### Story 8.4: Azure Container Apps Deployment Configuration
-**Story Points:** 5
-**Priority:** High
-
-**Description:**
-Configure deployment to Azure Container Apps with IaC.
-
-**Acceptance Criteria:**
-- [ ] Bicep/Terraform template for Container Apps
-- [ ] Environment variables configured
-- [ ] Managed identity for Key Vault access
-- [ ] Container Apps ingress configured (HTTPS only)
-- [ ] Scaling rules defined (CPU/memory)
-- [ ] Deployment pipeline in Azure DevOps/GitHub Actions
-
-**Technical Notes:**
-- Use managed identity for Azure resources
-- Configure min/max replicas
-- Set resource limits (CPU, memory)
-- Enable container logs to Log Analytics
-
----
-
-### Story 8.5: CI/CD Pipeline Setup
-**Story Points:** 5
-**Priority:** High
-
-**Description:**
-Create CI/CD pipeline for automated build, test, and deployment.
-
-**Acceptance Criteria:**
-- [ ] Build pipeline runs on every commit
-- [ ] Unit tests run in pipeline
-- [ ] Integration tests run in pipeline
-- [ ] Code coverage check (fail if <80%)
-- [ ] Docker image built and pushed to ACR
-- [ ] Deployment to dev environment automated
-- [ ] Manual approval gate for production
-
-**Technical Notes:**
-- Use GitHub Actions or Azure DevOps
-- Cache dependencies for faster builds
-- Run tests in parallel
-- Tag images with git commit SHA
-
----
-
-## Sprint 9: Documentation & Handoff
-
-### Story 9.1: API Documentation
-**Story Points:** 2
-**Priority:** Medium
-
-**Description:**
-Complete API documentation with Swagger/OpenAPI.
-
-**Acceptance Criteria:**
-- [ ] Swagger UI enabled
-- [ ] All endpoints documented
-- [ ] Request/response examples included
-- [ ] Authentication documented
-- [ ] Error response codes documented
-- [ ] Hosted at `/swagger` endpoint
-
-**Technical Notes:**
-- Use XML comments for Swagger generation
-- Include example values
-- Document rate limits
-
----
-
-### Story 9.2: Operational Runbook
-**Story Points:** 3
-**Priority:** Medium
-
-**Description:**
-Create operational runbook for support team.
-
-**Acceptance Criteria:**
-- [ ] Architecture overview documented
-- [ ] Common troubleshooting scenarios documented
-- [ ] How to check logs and metrics
-- [ ] How to manually process failed messages
-- [ ] How to handle Twilio outages
-- [ ] Emergency contact information
-- [ ] Link to all dashboards and alerts
-
-**Technical Notes:**
-- Keep in team wiki or docs repository
-- Include screenshots of dashboards
-- Update as issues arise
-
----
-
-### Story 9.3: Developer Setup Guide
-**Story Points:** 2
-**Priority:** Medium
-
-**Description:**
-Create comprehensive developer setup guide.
-
-**Acceptance Criteria:**
-- [ ] Prerequisites documented (SDKs, tools)
-- [ ] Local development setup steps
-- [ ] How to run database migrations
-- [ ] How to configure local secrets
-- [ ] How to run tests
-- [ ] How to use docker-compose for local testing
-- [ ] Troubleshooting common issues
-
-**Technical Notes:**
-- Keep README.md updated
-- Include VS Code/Rider setup tips
-- Document environment variables
+- Use Application Insights alerts
+- Set alert thresholds based on SLOs
+- Include context in alert messages (not just threshold hit)
+- Test alert notifications work
 
 ---
 
@@ -748,15 +955,21 @@ Create comprehensive developer setup guide.
 
 ---
 
-### Enhancement: Additional Message Types
+### Enhancement: Multi-Venue Phone Number Pooling
 **Story Points:** 8
-**Description:** Support event reminders, ticket delivery notifications, etc. Add new event types and templates.
+**Description:** Optimize costs by using pooled phone numbers with routing by venue.
 
 ---
 
-### Enhancement: Multi-Provider Support
+### Enhancement: Additional SMS Providers (Plivo, MessageBird)
 **Story Points:** 13
-**Description:** Implement additional SMS providers (Plivo, MessageBird) with automatic failover.
+**Description:** Implement additional SMS providers with automatic failover.
+
+---
+
+### Enhancement: Self-Service Consent Management Portal
+**Story Points:** 8
+**Description:** Customer-facing UI for managing SMS preferences per venue.
 
 ---
 
@@ -766,28 +979,62 @@ Create comprehensive developer setup guide.
 
 ---
 
-### Enhancement: Self-Service Consent Management UI
-**Story Points:** 8
-**Description:** Customer portal for managing SMS preferences.
+### Enhancement: Redis Caching for Consent
+**Story Points:** 5
+**Description:** Add Redis layer to cache frequent consent lookups.
 
 ---
 
-### Enhancement: A/B Testing for Message Templates
-**Story Points:** 8
-**Description:** Support multiple templates with analytics to optimize engagement.
+## Deployment Strategy
+
+### Multiple Daily Deployments
+- **Frequency:** Deploy multiple times per day (main branch auto-deploys to dev)
+- **Approval Gate:** Manual approval required for production
+- **Rollback:** Via feature flag (no need for container rollback)
+- **Feature Flag:** Order Confirmation service checks flag before publishing SMS event
+  - Can enable/disable SMS flow per venue without code deployment
+  - Gradual rollout: enable for 10% venues, then 50%, then 100%
+
+### GitHub Actions Workflow
+1. **On every commit:** Build, unit test, coverage check
+2. **On main branch:** Build Docker image, push to ACR, deploy to dev
+3. **Manual trigger:** Deploy to production (requires approval)
+4. **Production deployment:** Terraform applies infrastructure changes, GitHub Actions updates container
+
+### Terraform Workflow
+1. **Local development:** `terraform plan` to validate
+2. **On merge to main:** Terraform Cloud applies changes
+3. **ACR image updates:** Container Apps pulls latest tagged image
+4. **Blue-green deployment:** (future enhancement) for zero-downtime updates
+
+---
+
+## Success Metrics
+
+- **Deployment Frequency:** >1x per day
+- **Delivery Rate:** >95% of SMS sent successfully
+- **Performance:** P95 send latency < 3 seconds
+- **Reliability:** 99.9% uptime
+- **Compliance:** 0 SMS sent to opted-out users
+- **Cost:** <$0.01 per SMS (Twilio + infrastructure)
+- **Lead Time:** <1 hour from code commit to production
+- **MTTR (Mean Time To Recovery):** <5 minutes via feature flag
 
 ---
 
 ## Dependencies & Prerequisites
 
 **Before Sprint 1:**
+- [ ] GitHub repository created
 - [ ] Azure subscription and resource group provisioned
-- [ ] Azure Service Bus namespace created with topic
-- [ ] SQL Server database provisioned (Dev environment)
-- [ ] Twilio account created with phone number
-- [ ] Datadog account and API key obtained
-- [ ] Azure Container Registry created
-- [ ] Access granted to shared Orders/Customers database (read-only)
+- [ ] ACR (Azure Container Registry) created
+- [ ] Terraform Cloud account (or Azure Storage backend) for state
+- [ ] Key Vault created (dev and prod)
+- [ ] Service Bus namespace with topic (dev and prod)
+- [ ] SQL Server instances (dev and prod)
+- [ ] Twilio account with test and production phone numbers
+- [ ] Datadog account (optional)
+- [ ] GitHub Actions secrets configured: AZURE_CREDENTIALS, TWILIO_ACCOUNT_SID, etc.
 
 ---
 
@@ -795,18 +1042,8 @@ Create comprehensive developer setup guide.
 
 | Risk | Impact | Mitigation |
 |------|--------|------------|
-| Twilio API changes | Medium | Pin SDK version, monitor changelog |
-| Service Bus message throughput | High | Load test early, configure scaling |
-| Shared database schema changes | Medium | Monitor changes, version repositories |
-| PII/compliance concerns | High | Security review before production, GDPR compliance check |
-| Message delivery delays | Low | Set clear SLA expectations with stakeholders |
-
----
-
-## Success Metrics
-
-- **Delivery Rate:** >95% of SMS sent successfully
-- **Performance:** P95 send latency < 3 seconds
-- **Reliability:** 99.9% uptime
-- **Compliance:** 0 SMS sent to opted-out users
-- **Cost:** <$0.01 per SMS sent (including Twilio + infrastructure)
+| Multiple deployments = more production incidents | High | Feature flag enables quick rollback, comprehensive testing, monitoring |
+| Database schema drift | Medium | Versioned migrations, preview environment testing |
+| Service Bus message backlog | Medium | Auto-scaling configured, load testing in sprint 11 |
+| Twilio API rate limits | Medium | Rate limiting implemented, monitor usage |
+| Key Vault secret rotation | Low | Automatic rotation policy configured |

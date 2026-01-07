@@ -46,7 +46,7 @@ A vendor-agnostic SMS notification service for sending order confirmation messag
 #### API Layer
 | Endpoint | Method | Purpose |
 |----------|--------|---------|
-| `/webhook/sms-provider` | POST | Receive STOP/START messages from SMS provider |
+| `/webhook/twilio\|plivo` | POST | Receive STOP/START messages from SMS provider |
 | `/api/consent/{venueId}/{phone}` | GET | Query consent status for venue (for other services) |
 | `/api/history` | GET | Audit/compliance queries |
 
@@ -63,87 +63,96 @@ A vendor-agnostic SMS notification service for sending order confirmation messag
 
 ### Database Tables (SMS-Owned)
 
-```sql
--- Phone number assignments per venue
-CREATE TABLE VenuePhoneNumbers (
-    Id UNIQUEIDENTIFIER PRIMARY KEY,
-    VenueId UNIQUEIDENTIFIER NOT NULL, -- FK to Venues table
-    PhoneNumber NVARCHAR(20) NOT NULL, -- Provider phone number (E.164 format)
-    ProviderId NVARCHAR(100) NOT NULL, -- Provider-specific identifier (e.g., Twilio Phone Number SID)
-    ProviderName NVARCHAR(50) NOT NULL, -- 'twilio', 'plivo', etc.
-    Status NVARCHAR(20) NOT NULL, -- 'active', 'inactive', 'released'
-    AssignedAt DATETIME2 NOT NULL,
-    ReleasedAt DATETIME2 NULL,
-    CreatedAt DATETIME2 NOT NULL,
-    UpdatedAt DATETIME2 NOT NULL,
-    UNIQUE INDEX IX_VenuePhoneNumbers_Venue (VenueId) WHERE Status = 'active',
-    INDEX IX_VenuePhoneNumbers_Phone (PhoneNumber)
-);
+```pseudocode
+// Phone number assignments per venue
+TABLE VenuePhoneNumbers
+  id: UUID [primary key]
+  venueId: UUID [required, unique when status = 'active']
+  phoneNumber: String [E.164 format, indexed]
+  providerId: String [provider-specific identifier, e.g., Twilio Phone Number SID]
+  providerName: String ['twilio', 'plivo', etc.]
+  status: String ['active', 'inactive', 'released']
+  assignedAt: DateTime [required]
+  releasedAt: DateTime [nullable]
+  createdAt: DateTime [required]
+  updatedAt: DateTime [required]
 
--- Consent tracking (scoped to venue + consumer phone)
-CREATE TABLE SmsConsent (
-    Id UNIQUEIDENTIFIER PRIMARY KEY,
-    VenueId UNIQUEIDENTIFIER NOT NULL, -- Consent is venue-specific
-    PhoneNumber NVARCHAR(20) NOT NULL, -- Consumer phone number
-    Status NVARCHAR(20) NOT NULL, -- 'opted_in', 'opted_out'
-    InitialConsentSource NVARCHAR(50), -- 'checkout', 'account_settings'
-    InitialConsentAt DATETIME2,
-    OptedOutAt DATETIME2 NULL,
-    OptedInAt DATETIME2 NULL,
-    CreatedAt DATETIME2 NOT NULL,
-    UpdatedAt DATETIME2 NOT NULL,
-    UNIQUE INDEX IX_SmsConsent_Venue_Phone (VenueId, PhoneNumber),
-    INDEX IX_SmsConsent_Phone (PhoneNumber)
-);
+// Consent tracking (scoped to venue + consumer phone)
+TABLE SmsConsent
+  id: UUID [primary key]
+  venueId: UUID [required, part of unique constraint]
+  phoneNumber: String [required, part of unique constraint, indexed]
+  status: String ['opted_in', 'opted_out']
+  initialConsentSource: String ['checkout', 'account_settings', nullable]
+  initialConsentAt: DateTime [nullable]
+  optedOutAt: DateTime [nullable]
+  optedInAt: DateTime [nullable]
+  createdAt: DateTime [required]
+  updatedAt: DateTime [required]
 
--- Send history for audit/compliance
-CREATE TABLE SmsSendHistory (
-    Id UNIQUEIDENTIFIER PRIMARY KEY,
-    OrderId UNIQUEIDENTIFIER NOT NULL,
-    VenueId UNIQUEIDENTIFIER NOT NULL,
-    CustomerId UNIQUEIDENTIFIER NOT NULL,
-    PhoneNumber NVARCHAR(20) NOT NULL, -- Consumer phone number
-    SenderPhoneNumber NVARCHAR(20) NOT NULL, -- Venue's provider number used to send
-    MessageType NVARCHAR(50) NOT NULL, -- 'order_confirmation'
-    Status NVARCHAR(50) NOT NULL, -- 'sent', 'failed', 'skipped_no_consent', 'blocked_opted_out'
-    ProviderMessageId NVARCHAR(100) NULL, -- Provider-specific message ID (e.g., Twilio Message SID)
-    ProviderName NVARCHAR(50) NOT NULL, -- 'twilio', 'plivo', etc.
-    ErrorCode NVARCHAR(20) NULL,
-    ErrorMessage NVARCHAR(500) NULL,
-    CreatedAt DATETIME2 NOT NULL,
-    INDEX IX_SmsSendHistory_Order (OrderId),
-    INDEX IX_SmsSendHistory_Venue (VenueId),
-    INDEX IX_SmsSendHistory_Phone (PhoneNumber),
-    INDEX IX_SmsSendHistory_Created (CreatedAt)
-);
+// Send history for audit/compliance
+TABLE SmsSendHistory
+  id: UUID [primary key]
+  orderId: UUID [required, indexed]
+  venueId: UUID [required, indexed]
+  customerId: UUID [required]
+  phoneNumber: String [consumer phone number, indexed]
+  senderPhoneNumber: String [venue's provider number used to send]
+  messageType: String ['order_confirmation']
+  status: String ['sent', 'failed', 'skipped_no_consent', 'blocked_opted_out']
+  providerMessageId: String [provider-specific message ID, nullable]
+  providerName: String ['twilio', 'plivo', etc.]
+  errorCode: String [nullable]
+  errorMessage: String [nullable]
+  createdAt: DateTime [required, indexed]
 ```
 
 ## Flows
 
 ### Order Confirmation SMS Flow
-1. Payment succeeds → Order handler sends confirmation email
-2. Order handler publishes `SendOrderConfirmationSms` event to Service Bus
-3. SMS Service receives event
-4. Queries database for order status and details (including VenueId)
-5. If order is cancelled/invalid → log and skip
-6. Queries customer data (phone, name)
-7. Looks up venue's assigned phone number from `VenuePhoneNumbers` table
-8. If no phone number assigned → provision new provider number, store in table
-9. Checks `SmsConsent` table for (VenueId, consumer phone)
-10. If not consented → log, record in history, skip
-11. Formats message using template
-12. Sends via `ISmsProvider` using venue's phone number as sender
-13. Records result in `SmsSendHistory` (including VenueId and sender number)
-14. Emits metrics to Datadog
+
+```mermaid
+graph TD
+    A["Payment succeeds<br/>Order confirmation email sent"] --> B["Check SmsConsent<br/>for venue + phone"]
+    B --> C{Opted in?}
+    C -->|No| D["Log and skip<br/>no event sent"]
+    C -->|Yes| E["Publish SendOrderConfirmationSms<br/>event to Service Bus"]
+    E --> F["SMS Service receives event"]
+    F --> G["Query order details<br/>from database"]
+    G --> H{Order valid?}
+    H -->|No| I["Log and skip"]
+    H -->|Yes| J["Lookup venue's phone number<br/>from VenuePhoneNumbers"]
+    J --> K{Phone assigned?}
+    K -->|No| L["Provision new provider<br/>phone number"]
+    L --> M["Store in VenuePhoneNumbers<br/>table"]
+    M --> N["Query customer data<br/>phone, name"]
+    K -->|Yes| N
+    N --> O["Format message<br/>using template"]
+    O --> P["Send via ISmsProvider<br/>as venue sender"]
+    P --> Q["Record in SmsSendHistory"]
+    Q --> R["Emit metrics to Datadog"]
+    D --> S["End"]
+    I --> S
+    R --> S
+```
 
 ### Opt-Out Webhook Flow
-1. Consumer texts "STOP" to venue's provider number
-2. Provider auto-replies and calls webhook with message details
-3. SMS Service validates provider signature
-4. Looks up VenueId from `VenuePhoneNumbers` based on recipient number
-5. Updates `SmsConsent` to `opted_out` for (VenueId, consumer phone)
-6. Logs event, emits metric
-7. **Note**: Consumer can still receive SMS from other venues they've purchased from
+
+```mermaid
+graph TD
+    A["Consumer texts STOP<br/>to venue provider number"] --> B["Provider auto-replies<br/>and calls webhook"]
+    B --> C["SMS Service receives<br/>webhook"]
+    C --> D["Validate provider<br/>signature"]
+    D --> E{Signature valid?}
+    E -->|No| F["Reject webhook"]
+    E -->|Yes| G["Lookup VenueId<br/>from VenuePhoneNumbers<br/>based on recipient number"]
+    G --> H["Update SmsConsent<br/>to opted_out<br/>for VenueId + phone"]
+    H --> I["Log event and emit<br/>opt_out metric"]
+    I --> J["Return 200 OK"]
+    F --> K["End"]
+    J --> K
+    L["Note: Consumer can still<br/>receive SMS from<br/>other venues"]
+```
 
 ### Error Handling
 | Scenario | Action |

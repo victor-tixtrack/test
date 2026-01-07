@@ -9,14 +9,14 @@ flowchart TB
     end
 
     subgraph MessageBus["Azure Service Bus"]
-        TOPIC[("SendOrderConfirmationSms\nTopic")]
+        TOPIC[("SendOrderConfirmationSms<br/>Topic")]
     end
 
     subgraph SMSService["SMS Notification Service (Azure Container Apps)"]
         subgraph API["API Layer"]
-            WEBHOOK["/webhook/twilio\n(STOP/START)"]
-            CONSENT_API["/api/consent\n(Query opt-out status)"]
-            HISTORY_API["/api/history\n(Audit queries)"]
+            WEBHOOK["/webhook/twilio<br/>(STOP/START)"]
+            CONSENT_API["/api/consent<br/>(Query opt-out status)"]
+            HISTORY_API["/api/history<br/>(Audit queries)"]
         end
         
         subgraph ServiceLayer["Service Layer"]
@@ -33,7 +33,7 @@ flowchart TB
         end
         
         subgraph DataLayer["Data Access Layer"]
-            ORDER_REPO[Order Repository\n- read only -]
+            ORDER_REPO[Order Repository<br/>- read only -]
             CONSENT_REPO[Consent Repository]
             HISTORY_REPO[Send History Repository]
         end
@@ -55,8 +55,8 @@ flowchart TB
     end
 
     subgraph Observability["Observability"]
-        DATADOG[Datadog\nMetrics & APM]
-        APPINSIGHTS[Application Insights\nLogging & Tracing]
+        DATADOG[Datadog<br/>Metrics & APM]
+        APPINSIGHTS[Application Insights<br/>Logging & Tracing]
     end
 
     %% Order Flow
