@@ -1,5 +1,5 @@
 # Multi-stage build
-FROM mcr.microsoft.com/dotnet/sdk:10 AS build
+FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /src
 
 # Copy solution and project files
@@ -16,7 +16,7 @@ RUN dotnet restore "SmsService.sln"
 COPY . .
 
 # Build
-RUN dotnet build "SmsService.sln" -c Release -o /app/build
+RUN dotnet build "SmsService.sln" -c Release
 
 # Run tests
 RUN dotnet test "SmsService.Tests/SmsService.Tests.csproj" -c Release --no-build --logger "console;verbosity=minimal"
@@ -25,7 +25,7 @@ RUN dotnet test "SmsService.Tests/SmsService.Tests.csproj" -c Release --no-build
 RUN dotnet publish "SmsService.Api/SmsService.Api.csproj" -c Release -o /app/publish
 
 # Runtime image
-FROM mcr.microsoft.com/dotnet/aspnet:10
+FROM mcr.microsoft.com/dotnet/aspnet:10.0
 WORKDIR /app
 
 # Install curl for health checks

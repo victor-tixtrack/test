@@ -1,11 +1,9 @@
-version: '3.8'
-
 services:
-  sms-api:
+  sms-service-api:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: nliven-sms-api
+    container_name: sms-service-api
     ports:
       - "5000:5000"
       - "5001:5001"
@@ -13,23 +11,21 @@ services:
       - ASPNETCORE_ENVIRONMENT=Development
       - ASPNETCORE_URLS=http://+:5000
     depends_on:
-      - sqlserver
+      - sms-service-db
     networks:
-      - sms-network
-    volumes:
-      - ./SmsService.Api:/app/SmsService.Api:ro
+      - sms-service-network
 
-  sqlserver:
+  sms-service-db:
     image: mcr.microsoft.com/mssql/server:latest
-    container_name: nliven-sms-db
+    container_name: sms-service-db
     environment:
       - ACCEPT_EULA=Y
       - SA_PASSWORD=DevPassword123!
       - MSSQL_PID=Express
     ports:
-      - "1433:1433"
+      - "3433:1433"
     networks:
-      - sms-network
+      - sms-service-network
     healthcheck:
       test: ["CMD-SHELL", "/opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P DevPassword123! -Q 'SELECT 1' || exit 1"]
       interval: 10s
@@ -37,5 +33,5 @@ services:
       retries: 5
 
 networks:
-  sms-network:
+  sms-service-network:
     driver: bridge

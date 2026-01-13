@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
 using Serilog;
 using SmsService.Api.Configuration;
 
@@ -19,13 +20,12 @@ builder.Services.ConfigureApiServices(builder.Configuration);
 var app = builder.Build();
 
 // Configure middleware
-app.UseHealthChecks("/health/live");
-app.UseHealthChecks("/health/ready");
+app.MapHealthChecks(
+    "/healthz/ready",
+    new HealthCheckOptions { Predicate = healthCheck => healthCheck.Tags.Contains("ready") }
+);
 
-// Custom health endpoint
-app.MapGet("/health", () => new { status = "healthy" }).WithName("Health");
-
-app.MapHealthChecks("/health");
+app.MapHealthChecks("/healthz/live", new HealthCheckOptions { Predicate = _ => false });
 
 app.Run();
 

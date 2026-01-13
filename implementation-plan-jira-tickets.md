@@ -127,7 +127,7 @@ Set up GitHub Actions CI/CD pipeline for build, test, and deployment to Azure.
 **Technical Notes:**
 - Use dotnet 10 SDK image
 - Cache NuGet packages between runs
-- Tag images: `acr.azurecr.io/nliven-sms:latest` and `acr.azurecr.io/nliven-sms:${{ github.sha }}`
+- Tag images: `acr.azurecr.io/sms-service:latest` and `acr.azurecr.io/sms-service:${{ github.sha }}`
 - Dev environment deploys automatically on main branch
 - Production requires manual approval
 - Can run in parallel with Story 1.4.2

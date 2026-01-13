@@ -37,7 +37,7 @@ SmsService.sln
 1. **Clone the repository**
    ```bash
    git clone <repo-url>
-   cd nliven-sms
+   cd sms-service
    ```
 
 2. **Restore dependencies**
@@ -60,9 +60,8 @@ SmsService.sln
 
 ### Health Check Endpoints
 
-- `GET /health` - Overall health status
-- `GET /health/live` - Liveness probe
-- `GET /health/ready` - Readiness probe
+- `GET /healthz/live` - Liveness probe (always healthy if app is running)
+- `GET /healthz/ready` - Readiness probe (healthy when ready to accept requests)
 
 ### Running Tests
 
@@ -96,7 +95,7 @@ Code formatting with CSharpier runs automatically on commit to maintain consiste
 
 2. **Install git hooks**
    ```bash
-   cd nliven-sms
+   cd sms-service
    pre-commit install
    ```
 
@@ -118,7 +117,7 @@ Code formatting with CSharpier runs automatically on commit to maintain consiste
 
 2. **Install git hooks**
    ```powershell
-   cd nliven-sms
+   cd sms-service
    pre-commit install
    ```
 
@@ -137,7 +136,7 @@ Code formatting with CSharpier runs automatically on commit to maintain consiste
 
 2. **Install git hooks**
    ```bash
-   cd nliven-sms
+   cd sms-service
    pre-commit install
    ```
 
