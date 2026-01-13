@@ -1,3 +1,5 @@
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
+using Serilog;
 using SmsService.Api.Configuration;
 
 var builder = WebApplication.CreateBuilder(args);
