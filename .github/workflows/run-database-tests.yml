@@ -1,0 +1,37 @@
+name: Build and Database Tests
+
+on:
+  pull_request:
+    paths:
+      - '**/*.cs'
+      - '**/*.csproj'
+      - '**/*.sln'
+      - '*.sln'
+      - .github/workflows/build-database-tests.yml
+  workflow_call: ~
+
+jobs:
+  database-tests:
+    runs-on: ubuntu-latest
+    name: Database Migration Tests
+    permissions:
+      actions: read
+      contents: read
+      pull-requests: write
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v3
+      with:
+        dotnet-version: '10.0.x'
+
+    - name: Restore
+      run: dotnet restore SmsService.sln
+
+    - name: Build
+      run: dotnet build SmsService.sln --no-restore --property:WarningLevel=0
+
+    - name: Run Database Tests
+      run: dotnet test SmsService.Core.Database.Tests/SmsService.Core.Database.Tests.csproj --logger "trx" --results-directory ./TestResults --no-build --no-restore
