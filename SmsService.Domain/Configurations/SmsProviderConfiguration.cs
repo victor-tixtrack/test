@@ -8,7 +8,7 @@ public class SmsProviderConfiguration : IEntityTypeConfiguration<SmsProvider>
 {
     public void Configure(EntityTypeBuilder<SmsProvider> builder)
     {
-        builder.ToTable("SmsProviders");
+        builder.ToTable("SmsProvider");
 
         builder.HasKey(p => p.Id);
         builder.Property(p => p.Id).ValueGeneratedOnAdd();

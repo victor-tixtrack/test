@@ -13,6 +13,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SmsService.Tests", "SmsServ
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SmsService.Domain", "SmsService.Domain\SmsService.Domain.csproj", "{B84C0A70-3F00-4FD2-A407-E1387BFAF7CD}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SmsService.Migrations", "..\sms-service-db\Migrations\SmsService.Migrations.csproj", "{674AFF6F-ADF0-4122-B68D-27E3F92B5682}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -83,6 +85,18 @@ Global
 		{B84C0A70-3F00-4FD2-A407-E1387BFAF7CD}.Release|x64.Build.0 = Release|Any CPU
 		{B84C0A70-3F00-4FD2-A407-E1387BFAF7CD}.Release|x86.ActiveCfg = Release|Any CPU
 		{B84C0A70-3F00-4FD2-A407-E1387BFAF7CD}.Release|x86.Build.0 = Release|Any CPU
+		{674AFF6F-ADF0-4122-B68D-27E3F92B5682}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{674AFF6F-ADF0-4122-B68D-27E3F92B5682}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{674AFF6F-ADF0-4122-B68D-27E3F92B5682}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{674AFF6F-ADF0-4122-B68D-27E3F92B5682}.Debug|x64.Build.0 = Debug|Any CPU
+		{674AFF6F-ADF0-4122-B68D-27E3F92B5682}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{674AFF6F-ADF0-4122-B68D-27E3F92B5682}.Debug|x86.Build.0 = Debug|Any CPU
+		{674AFF6F-ADF0-4122-B68D-27E3F92B5682}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{674AFF6F-ADF0-4122-B68D-27E3F92B5682}.Release|Any CPU.Build.0 = Release|Any CPU
+		{674AFF6F-ADF0-4122-B68D-27E3F92B5682}.Release|x64.ActiveCfg = Release|Any CPU
+		{674AFF6F-ADF0-4122-B68D-27E3F92B5682}.Release|x64.Build.0 = Release|Any CPU
+		{674AFF6F-ADF0-4122-B68D-27E3F92B5682}.Release|x86.ActiveCfg = Release|Any CPU
+		{674AFF6F-ADF0-4122-B68D-27E3F92B5682}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

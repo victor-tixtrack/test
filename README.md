@@ -6,22 +6,26 @@ A vendor-agnostic SMS notification service for sending order confirmation messag
 
 ```
 SmsService.sln
-├── SmsService.Core/                 # Domain models and interfaces (no external dependencies)
-│   ├── Models/                      # Domain entities and DTOs
+├── SmsService.Domain/               # Domain entities and business logic (DDD approach)
+│   ├── Entities/                    # Domain entities (e.g., SmsProvider)
+│   ├── Configurations/              # EF Core entity configurations
+│   └── Data/                        # DbContext
+├── SmsService.Core/                 # Application core and interfaces
+│   ├── Models/                      # DTOs and view models
 │   ├── Interfaces/                  # Repository and service interfaces
-│   └── Services/                    # Domain services
-├── SmsService.Infrastructure/       # External services and data access (EF Core, Twilio, etc)
-│   ├── Data/                        # DbContext and migrations
+│   └── Services/                    # Application services
+├── SmsService.Infrastructure/       # External services and data access implementations
 │   ├── Repositories/                # Repository implementations
-│   ├── Services/                    # Infrastructure services
-│   └── Configurations/              # EF configurations
+│   ├── Services/                    # Infrastructure services (Twilio, etc)
+│   └── Configurations/              # Infrastructure configuration
 ├── SmsService.Api/                  # REST API layer
 │   ├── Endpoints/                   # API endpoints
 │   ├── Middleware/                  # Custom middleware
 │   └── Configuration/               # Dependency injection setup
-└── SmsService.Tests/                # Unit and integration tests
-    ├── Unit/                        # Unit tests
-    └── Integration/                 # Integration tests
+├── SmsService.Tests/                # Unit and integration tests
+│   ├── Unit/                        # Unit tests
+│   └── Integration/                 # Integration tests
+└── SmsService.Core.Database.Tests/  # Database migration validation tests
 ```
 
 ## Getting Started
@@ -36,7 +40,8 @@ SmsService.sln
 
 1. **Clone the repository**
    ```bash
-   git clone <repo-url>
+   git clone <sms-service-repo-url>
+   git clone <sms-service-db-repo-url>
    cd sms-service
    ```
 
@@ -80,107 +85,35 @@ See [sms-architecture-design.md](sms-architecture-design.md) for detailed archit
 - **Multi-Tenant**: Each venue gets dedicated phone number
 - **Consent-First**: Check consent before publishing to service bus
 
+## Database Separation
+
+Database migrations are managed in a separate Git repository (`sms-service-db`) to enable independent deployment cycles. This repository must be cloned as a sibling directory alongside the sms-service repository.
+
+This separation supports zero-downtime deployments by allowing database schema changes to be deployed independently from application code changes. The architecture supports roll-forward deployments:
+
+1. Deploy database migrations (adds new columns/tables without breaking existing code)
+2. Deploy domain model code with new properties (new properties with NotMapped attributes)
+
+We run database tests on each PR to ensure PRs are rolling forward safely, and not making unexpected breaking changes.
+
 ## Development Workflow
 
-### Setting Up Pre-Commit Hooks
+### Making an EntityFramework Change
 
-Code formatting with CSharpier runs automatically on commit to maintain consistent style. Setup instructions differ by platform:
+**Zero Downtime Deployment**
 
-#### macOS
+1. PR A: Add property to entity with `[NotMapped]` attribute
+2. PR B: Generate migration: `cd ../sms-service-db/Migrations && USE_REAL_DB=true dotnet ef migrations add AddMyProperty`
+3. Note the Deploy order of PR A and PR B does not matter, both are safe to do without the other!
+3. PR C: Remove `[NotMapped]` attribute → (property now mapped to column)
 
-1. **Install pre-commit framework**
-   ```bash
-   brew install pre-commit
-   ```
-
-2. **Install git hooks**
-   ```bash
-   cd sms-service
-   pre-commit install
-   ```
-
-3. **Verify setup** (optional)
-   ```bash
-   pre-commit run --all-files
-   ```
-
-#### Windows (PowerShell)
-
-1. **Install pre-commit framework using pip**
-   ```powershell
-   # Option A: Using pipx (recommended)
-   pipx install pre-commit
-   
-   # Option B: Using pip
-   pip install pre-commit
-   ```
-
-2. **Install git hooks**
-   ```powershell
-   cd sms-service
-   pre-commit install
-   ```
-
-3. **Verify setup** (optional)
-   ```powershell
-   pre-commit run --all-files
-   ```
-
-#### Linux
-
-1. **Install pre-commit framework**
-   ```bash
-   sudo apt-get install python3-pip
-   pip3 install pre-commit
-   ```
-
-2. **Install git hooks**
-   ```bash
-   cd sms-service
-   pre-commit install
-   ```
-
-3. **Verify setup** (optional)
-   ```bash
-   pre-commit run --all-files
-   ```
-
-### What Pre-Commit Hooks Do
-
-When you commit code:
-1. **dotnet tool restore** - Ensures CSharpier is installed
-2. **CSharpier** - Automatically formats all C# files to project standards
-
-If CSharpier makes changes, the commit will fail. Simply `git add` the formatted files and commit again.
-
-### Troubleshooting Pre-Commit
-
-**Hook not running on commit?**
-```bash
-# Verify hooks are installed
-cat .git/hooks/pre-commit
-
-# Re-install if needed
-pre-commit install --install-hooks
-```
-
-**CSharpier not found?**
-```bash
-# Restore .NET tools manually
-dotnet tool restore
-```
-
-**Want to skip hooks for a commit?**
-```bash
-git commit --no-verify  # Use with caution!
-```
 
 ### Standard Development Workflow
 
 1. Create feature branch from `main`
 2. Make changes with tests
 3. Ensure coverage >80%
-4. Commit (pre-commit hooks auto-format code)
+4. Commit
 5. Push to GitHub (triggers CI/CD)
 6. Create Pull Request
 7. Code review and merge to `main`
