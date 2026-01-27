@@ -1,9 +1,9 @@
 namespace SmsService.Domain.Entities;
 
 /// <summary>
-/// Enum table for SMS provider names (Twilio, Plivo, etc.)
+/// SMS provider entity (Twilio, Plivo, etc.)
 /// </summary>
-public class ProviderName
+public class SmsProvider
 {
     public int Id { get; set; }
     public required string Name { get; set; }

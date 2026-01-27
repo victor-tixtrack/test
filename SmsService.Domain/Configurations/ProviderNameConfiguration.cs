@@ -4,11 +4,11 @@ using SmsService.Domain.Entities;
 
 namespace SmsService.Domain.Configurations;
 
-public class ProviderNameConfiguration : IEntityTypeConfiguration<ProviderName>
+public class SmsProviderConfiguration : IEntityTypeConfiguration<SmsProvider>
 {
-    public void Configure(EntityTypeBuilder<ProviderName> builder)
+    public void Configure(EntityTypeBuilder<SmsProvider> builder)
     {
-        builder.ToTable("ProviderNames");
+        builder.ToTable("SmsProviders");
 
         builder.HasKey(p => p.Id);
         builder.Property(p => p.Id).ValueGeneratedOnAdd();
@@ -20,16 +20,5 @@ public class ProviderNameConfiguration : IEntityTypeConfiguration<ProviderName>
         builder.Property(p => p.IsActive).IsRequired().HasDefaultValue(true);
 
         builder.Property(p => p.CreatedAt).IsRequired().HasColumnType("datetime2");
-
-        // Seed data
-        builder.HasData(
-            new ProviderName
-            {
-                Id = 1,
-                Name = "twilio",
-                IsActive = true,
-                CreatedAt = DateTime.UtcNow,
-            }
-        );
     }
 }
