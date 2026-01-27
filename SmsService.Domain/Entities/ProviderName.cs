@@ -9,9 +9,4 @@ public class ProviderName
     public required string Name { get; set; }
     public bool IsActive { get; set; } = true;
     public DateTime CreatedAt { get; set; }
-
-    // Navigation properties
-    public ICollection<VenuePhoneNumber> VenuePhoneNumbers { get; set; } =
-        new List<VenuePhoneNumber>();
-    public ICollection<SmsSendHistory> SmsSendHistories { get; set; } = new List<SmsSendHistory>();
 }

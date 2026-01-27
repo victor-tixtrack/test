@@ -29,13 +29,6 @@ public class ProviderNameConfiguration : IEntityTypeConfiguration<ProviderName>
                 Name = "twilio",
                 IsActive = true,
                 CreatedAt = DateTime.UtcNow,
-            },
-            new ProviderName
-            {
-                Id = 2,
-                Name = "plivo",
-                IsActive = true,
-                CreatedAt = DateTime.UtcNow,
             }
         );
     }
