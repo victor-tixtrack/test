@@ -1,3 +1,6 @@
+using Microsoft.EntityFrameworkCore;
+using SmsService.Domain.Data;
+
 namespace SmsService.Api.Configuration;
 
 public static class ServiceConfiguration
@@ -12,6 +15,19 @@ public static class ServiceConfiguration
     {
         // Add health checks
         services.AddHealthChecks();
+
+        // Register DbContext
+        services.AddDbContext<SmsDbContext>(options =>
+            options.UseSqlServer(
+                configuration.GetConnectionString("SmsDatabase"),
+                sqlOptions =>
+                    sqlOptions.EnableRetryOnFailure(
+                        maxRetryCount: 3,
+                        maxRetryDelay: TimeSpan.FromSeconds(5),
+                        errorNumbersToAdd: null
+                    )
+            )
+        );
 
         return services;
     }

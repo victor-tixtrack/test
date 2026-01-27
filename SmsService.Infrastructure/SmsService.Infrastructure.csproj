@@ -2,6 +2,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\SmsService.Core\SmsService.Core.csproj" />
+    <ProjectReference Include="..\SmsService.Domain\SmsService.Domain.csproj" />
   </ItemGroup>
 
   <ItemGroup>
