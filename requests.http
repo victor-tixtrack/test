@@ -1,0 +1,55 @@
+### SMS Service API Tests
+
+# Base URL - change if running on different port
+@baseUrl = http://localhost:5010
+
+### Health Check - Liveness
+GET {{baseUrl}}/healthz/live
+
+### Health Check - Readiness  
+GET {{baseUrl}}/healthz/ready
+
+### Send Test SMS - Valid Request
+POST {{baseUrl}}/api/test-sms
+Content-Type: application/json
+
+{
+  "phoneNumber": "+15612183303",
+  "message": "Hello! This is a test SMS message from the service."
+}
+
+### Send Test SMS - Invalid Phone Number
+POST {{baseUrl}}/api/test-sms
+Content-Type: application/json
+
+{
+  "phoneNumber": "invalid-phone",
+  "message": "This should fail validation"
+}
+
+### Send Test SMS - Empty Message
+POST {{baseUrl}}/api/test-sms
+Content-Type: application/json
+
+{
+  "phoneNumber": "+12362370176",
+  "message": "Hello"
+}
+
+### Send Test SMS - Message Too Long
+POST {{baseUrl}}/api/test-sms
+Content-Type: application/json
+
+{
+  "phoneNumber": "+1234567890",
+  "message": "This is a very long message that exceeds the 1600 character limit. This is a very long message that exceeds the 1600 character limit. This is a very long message that exceeds the 1600 character limit. This is a very long message that exceeds the 1600 character limit. This is a very long message that exceeds the 1600 character limit. This is a very long message that exceeds the 1600 character limit. This is a very long message that exceeds the 1600 character limit. This is a very long message that exceeds the 1600 character limit. This is a very long message that exceeds the 1600 character limit. This is a very long message that exceeds the 1600 character limit."
+}
+
+### Send Test SMS - Missing Sender Credentials
+POST {{baseUrl}}/api/test-sms
+Content-Type: application/json
+
+{
+  "phoneNumber": "+1234567890",
+  "message": "Test message (will fail if PLIVO credentials not configured)"
+}

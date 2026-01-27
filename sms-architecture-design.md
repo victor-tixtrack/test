@@ -1,8 +1,32 @@
-# TixTrack SMS Notification Service - Architecture Design
+# SMS Notification Service - Architecture Design
+
+## Current Implementation Status (January 2026)
+
+### ✅ Completed Components
+- **Project Structure**: Clean architecture with 4 projects (Api, Core, Infrastructure, Tests)
+- **Health Checks**: `/healthz/live` and `/healthz/ready` endpoints operational
+- **Provider Abstraction**: `ISmsProvider` interface with `PlivoSmsProvider` fully implemented
+- **Plivo Integration**: HTTP-based SMS sending via Plivo API with error handling
+- **Logging**: Structured logging with Serilog throughout the stack
+- **Local Development**: Docker Compose setup for local testing
+
+### 🏗️ In Progress
+- **Database Schema**: SQL tables for enums, SmsConsent, SmsSendHistory, VenuePhoneNumbers
+- **Domain Models**: Event and entity models for clean architecture
+- **Entity Framework**: DbContext and repository configurations
+
+### 📋 Upcoming
+- **Service Bus Integration**: Azure Service Bus consumer for event processing
+- **Domain Services**: ConsentService, SmsOrchestrator, HistoryService
+- **Webhook Handler**: Provider opt-out webhook processing
+- **API Endpoints**: Consent query and history endpoints
+- **Twilio Provider**: Additional provider implementation
+
+---
 
 ## Overview
 
-A vendor-agnostic SMS notification service for sending order confirmation messages, designed to integrate with the existing TixTrack order flow while maintaining flexibility to swap SMS providers.
+A vendor-agnostic SMS notification service for sending order confirmation messages via multiple SMS providers (Plivo, Twilio, etc.), designed to integrate with order confirmation flows while maintaining flexibility to swap providers. The service manages consent per venue, tracks SMS delivery history for compliance, and handles provider webhooks for opt-out management.
 
 ## Architecture Decisions
 
@@ -18,8 +42,9 @@ A vendor-agnostic SMS notification service for sending order confirmation messag
 
 ### Provider Abstraction
 - **Pattern**: Port/Adapter (Hexagonal Architecture)
-- **Interface**: `ISmsProvider` with initial `TwilioSmsProvider` implementation
-- **Rationale**: Enables swapping providers without modifying business logic
+- **Interface**: `ISmsProvider` with implementations for `PlivoSmsProvider` and `TwilioSmsProvider`
+- **Current Implementation**: `PlivoSmsProvider` fully implemented; can send SMS via Plivo API
+- **Rationale**: Enables swapping providers without modifying business logic; clean separation of concerns
 
 ### Multi-Tenancy: Dedicated Phone Numbers per Venue
 - **Strategy**: Each venue gets its own dedicated SMS provider phone number
@@ -36,19 +61,44 @@ A vendor-agnostic SMS notification service for sending order confirmation messag
 - **SMS service owns all consent data** - not derived from user account flags
 - **Consent scope**: Per-venue (consumer can opt out of one venue but remain opted in for others)
 - **Initial consent**: Captured when user provides phone number during checkout (checkbox)
-- **Opt-out handling**: Provider webhook updates local consent store for specific venue
-- **Rationale**: Single source of truth for SMS channel; carrier-level opt-outs are captured via webhook; venue-scoped consent provides better consumer control
+- **Opt-out handling**: Provider webhook (Azure Function) calls SMS Service internal endpoint to update consent
+- **Rationale**: Single source of truth for SMS channel; carrier-level opt-outs are captured via webhook; venue-scoped consent provides better consumer control; separation of concerns (webhook gateway vs. business logic)
+
+### Deployment Architecture
+- **SMS Notification Service** (Azure Container Apps - Private Network)
+  - Handles Service Bus events
+  - Sends SMS messages
+  - Owns consent business logic
+  - Exposes internal REST API for consent updates
+- **Webhook Handler** (Azure Function - Public)
+  - Receives provider webhooks (STOP/START messages)
+  - Validates provider signatures
+  - Calls SMS Service internal endpoint to update consent
+  - Lightweight adapter pattern - no business logic, only message validation and forwarding
+- **Shared Database** (Azure SQL)
+  - Both services access `SmsConsent`, `SmsSendHistory`, `VenuePhoneNumbers` tables
 
 ## Components
 
 ### SMS Notification Service (Azure Container Apps)
 
 #### API Layer
+
+**Public Endpoints (via Azure API Management or Application Gateway):**
 | Endpoint | Method | Purpose |
-|----------|--------|---------|
-| `/webhook/twilio\|plivo` | POST | Receive STOP/START messages from SMS provider |
+|----------|--------|----------|
 | `/api/consent/{venueId}/{phone}` | GET | Query consent status for venue (for other services) |
 | `/api/history` | GET | Audit/compliance queries |
+
+**Internal Endpoints (VNet-only, called by Azure Function):**
+| Endpoint | Method | Purpose |
+|----------|--------|----------|
+| `/api/internal/consent/update` | POST | Update consent status from webhook (called by Azure Function) |
+
+**Webhook Handler (Azure Function - Publicly Accessible):**
+| Endpoint | Method | Purpose |
+|----------|--------|----------|
+| `/{provider}/webhook` | POST | Receive STOP/START messages from SMS provider, validate signature, forward to SMS Service |
 
 #### Service Layer
 - **Service Bus Consumer**: Subscribes to `SendOrderConfirmationSms` topic
@@ -157,11 +207,12 @@ TABLE SmsSendHistory
 
 ```mermaid
 graph TD
-    A["Payment succeeds<br/>Order confirmation email sent"] --> B["Monolith enriches event:<br/>OrderId, VenueId, CustomerId<br/>PhoneNumber, CustomerName<br/>OrderTotal, TicketCount, etc."]
-    B --> C["Publish SendOrderConfirmationSms<br/>to Service Bus"]
-    C --> D["SMS Service receives event<br/>with full order context"]
-    D --> E["Check SmsConsent<br/>for venue + phone"]
-    E --> F{Opted in?}
+    A["Payment succeeds<br/>Order confirmation email sent"] 
+    --> B["Monolith enriches event:<br/>OrderId, VenueId, CustomerId<br/>PhoneNumber, CustomerName<br/>OrderTotal, TicketCount, etc."]
+    --> C["Publish SendOrderConfirmationSms<br/>to Service Bus"]
+    --> D["SMS Service receives event<br/>with full order context"]
+    --> E["Check SmsConsent<br/>for venue + phone"]
+    --> F{Opted in?}
     F -->|No| G["Log and skip<br/>no consent found"]
     F -->|Yes| H["Lookup venue's phone assignment<br/>from VenuePhoneNumbers"]
     H --> I{Phone assigned?}
@@ -170,8 +221,8 @@ graph TD
     K --> L["Format message<br/>using template + event data"]
     I -->|Yes| L
     L --> M["Send via ISmsProvider<br/>as venue sender"]
-    M --> N["Record in SmsSendHistory<br/>with VenuePhoneNumberID"]
-    N --> O["Emit metrics to Datadog"]
+    --> N["Record in SmsSendHistory<br/>with VenuePhoneNumberID"]
+    --> O["Emit metrics to Datadog"]
     G --> P["End"]
     O --> P
 ```
@@ -179,19 +230,23 @@ graph TD
 ### Opt-Out Webhook Flow
 
 ```mermaid
-graph TD
-    A["Consumer texts STOP<br/>to venue provider number"] --> B["Provider auto-replies<br/>and calls webhook"]
-    B --> C["SMS Service receives<br/>webhook"]
-    C --> D["Validate provider<br/>signature"]
-    D --> E{Signature valid?}
-    E -->|No| F["Reject webhook"]
-    E -->|Yes| G["Lookup VenueID<br/>from VenuePhoneNumbers<br/>based on recipient number"]
-    G --> H["Update SmsConsent<br/>StatusID to opted_out<br/>for VenueID + phone"]
-    H --> I["Log event and emit<br/>opt_out metric"]
-    I --> J["Return 200 OK"]
-    F --> K["End"]
-    J --> K
-    L["Note: Consumer can still<br/>receive SMS from<br/>other venues"]
+flowchart TD
+    A["Consumer texts STOP<br/>to venue provider number"] 
+    --> B["Provider auto-replies<br/>and calls webhook"]
+    --> C["Azure Function receives<br/>webhook request"]
+    --> D["Validate provider<br/>signature"]
+    --> E{Signature valid?}
+    -->|No| F["Return 400 Bad Request"]
+    -->|Yes| G["Extract VenueID and PhoneNumber<br/>from webhook payload"]
+    --> H["Call SMS Service<br/>POST /api/consent with<br/>opt_out request"]
+    H --> I["SMS Service updates SmsConsent<br/>StatusID to opted_out<br/>for VenueID + phone"]
+    --> J["Push SmsUnsubscribe message to `sms-optout` topic"]
+    --> K["Log event and emit<br/>opt_out metric"]
+    --> L["Return 200 OK to Function"]
+    --> M["Function acknowledges webhook"]
+    F --> N["End"]
+    M --> N
+    O["Note: Consumer can still<br/>receive SMS from<br/>other venues"]
 ```
 
 ### Error Handling

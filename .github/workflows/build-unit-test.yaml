@@ -1,0 +1,38 @@
+name: Build and Unit Tests
+
+on:
+  pull_request:
+    paths:
+      - '**/*.cs'
+      - '**/*.cshtml'
+      - '**/*.csproj'
+      - '**/*.sln'
+      - '*.sln'
+      - .github/workflows/build-unit-test.yaml
+  workflow_call: ~
+
+jobs:
+  build-and-unit-test:
+    runs-on: ubuntu-latest
+    name: Build and Unit Test dotnet
+    permissions:
+      actions: read
+      contents: read
+      pull-requests: write
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v3
+      with:
+        dotnet-version: '10.0.x'
+
+    - name: Restore
+      run: dotnet restore SmsService.sln
+
+    - name: Build
+      run: dotnet build SmsService.sln --no-restore --property:WarningLevel=0
+
+    - name: Unit Tests
+      run: dotnet test SmsService.sln --logger "trx" --results-directory ./TestResults --no-build --no-restore

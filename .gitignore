@@ -50,3 +50,5 @@ secrets.json
 # Rider
 .idea/
 *.sln.iml
+
+appsettings.Development.json
