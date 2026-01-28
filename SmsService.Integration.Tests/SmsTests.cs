@@ -8,11 +8,11 @@ using Xunit;
 
 namespace SmsService.Integration.Tests;
 
-public class SmsControllerTests : IClassFixture<WebApplicationFactory<Program>>
+public class SmsTests : IClassFixture<WebApplicationFactory<Program>>
 {
     private readonly HttpClient _client;
 
-    public SmsControllerTests(WebApplicationFactory<Program> factory)
+    public SmsTests(WebApplicationFactory<Program> factory)
     {
         // Override the SMS provider with NoOp for testing
         var testFactory = factory.WithWebHostBuilder(builder =>
@@ -36,7 +36,7 @@ public class SmsControllerTests : IClassFixture<WebApplicationFactory<Program>>
     [Fact]
     public async Task SendSms_ValidRequest_ReturnsSuccess()
     {
-        var request = new SmsRequest { To = "+1234567890", Message = "Test message" };
+        var request = new SmsRequest { PhoneNumber = "+1234567890", Message = "Test message" };
 
         var response = await _client.PostAsJsonAsync("/api/sms/send", request);
 

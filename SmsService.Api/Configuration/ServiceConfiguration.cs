@@ -26,6 +26,7 @@ public static class ServiceConfiguration
         // Add health checks
         services.AddHealthChecks();
 
+        // Register SMS Provider with HttpClient
         services.AddHttpClient();
         services.AddScoped<ISmsProvider>(serviceProvider =>
         {
