@@ -6,25 +6,29 @@ using SmsService.Core.Models;
 
 namespace SmsService.Infrastructure.Services;
 
-public class PlivoSmsProvider : ISmsProvider
+public class TwilioSmsProvider : ISmsProvider
 {
-    private readonly string? _authId;
+    private readonly string? _accountSid;
     private readonly string? _authToken;
     private readonly string? _senderNumber;
     private readonly HttpClient _httpClient;
-    private const string PlivoApiUrl = "https://api.plivo.com/v1";
+    private const string TwilioApiUrl = "https://api.twilio.com/2010-04-01";
 
-    public PlivoSmsProvider(
-        string? authId = null,
+    public TwilioSmsProvider(
+        HttpClient httpClient,
+        string? accountSid = null,
         string? authToken = null,
         string? senderNumber = null
     )
     {
-        _authId = authId ?? Environment.GetEnvironmentVariable("PLIVO_AUTH_ID");
-        _authToken = authToken ?? Environment.GetEnvironmentVariable("PLIVO_AUTH_TOKEN");
-        _senderNumber = senderNumber ?? Environment.GetEnvironmentVariable("PLIVO_SENDER_NUMBER");
-        _httpClient = new HttpClient();
+        _httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
+        _accountSid = accountSid ?? Environment.GetEnvironmentVariable("TWILIO_ACCOUNT_SID");
+        _authToken = authToken ?? Environment.GetEnvironmentVariable("TWILIO_AUTH_TOKEN");
+        _senderNumber = senderNumber ?? Environment.GetEnvironmentVariable("TWILIO_SENDER_NUMBER");
     }
+
+    public TwilioSmsProvider()
+        : this(new HttpClient()) { }
 
     public async Task<SmsResponse> SendSmsAsync(
         SmsRequest request,
@@ -40,7 +44,7 @@ public class PlivoSmsProvider : ISmsProvider
         }
 
         if (
-            string.IsNullOrEmpty(_authId)
+            string.IsNullOrEmpty(_accountSid)
             || string.IsNullOrEmpty(_authToken)
             || string.IsNullOrEmpty(_senderNumber)
         )
@@ -49,7 +53,7 @@ public class PlivoSmsProvider : ISmsProvider
             {
                 Success = false,
                 ErrorCode = "MISSING_CREDENTIALS",
-                ErrorMessage = "Plivo credentials not configured",
+                ErrorMessage = "Twilio credentials not configured",
             };
         }
 
@@ -57,43 +61,49 @@ public class PlivoSmsProvider : ISmsProvider
         {
             // Create basic auth header
             var credentials = Convert.ToBase64String(
-                Encoding.ASCII.GetBytes($"{_authId}:{_authToken}")
+                Encoding.ASCII.GetBytes($"{_accountSid}:{_authToken}")
             );
 
             // Prepare request
-            var requestUri = $"{PlivoApiUrl}/Account/{_authId}/Message/";
-            var content = new FormUrlEncodedContent(
-                new Dictionary<string, string>
-                {
-                    { "src", _senderNumber },
-                    { "dst", request.PhoneNumber },
-                    { "text", request.Message },
-                }
-            );
+            var requestUri = $"{TwilioApiUrl}/Accounts/{_accountSid}/Messages.json";
+            var requestBody = new Dictionary<string, string>
+            {
+                { "From", _senderNumber },
+                { "To", request.PhoneNumber },
+                { "Body", request.Message },
+            };
 
-            // Set auth header
-            _httpClient.DefaultRequestHeaders.Authorization =
+            if (!string.IsNullOrEmpty(request.CallbackUrl))
+            {
+                requestBody.Add("StatusCallback", request.CallbackUrl);
+            }
+
+            var content = new FormUrlEncodedContent(requestBody);
+
+            // Create request message to avoid mutating shared HttpClient headers
+            var requestMessage = new HttpRequestMessage(HttpMethod.Post, requestUri)
+            {
+                Content = content,
+            };
+            requestMessage.Headers.Authorization =
                 new System.Net.Http.Headers.AuthenticationHeaderValue("Basic", credentials);
 
             // Send request
-            var httpResponse = await _httpClient.PostAsync(requestUri, content, cancellationToken);
+            var httpResponse = await _httpClient.SendAsync(requestMessage, cancellationToken);
 
             // Parse response
             var responseContent = await httpResponse.Content.ReadAsStringAsync(cancellationToken);
-            var parsedResponse = JsonConvert.DeserializeObject<dynamic>(responseContent);
+            var parsedResponse = JsonConvert.DeserializeObject<TwilioResponse>(responseContent);
 
-            if (httpResponse.IsSuccessStatusCode)
+            if (httpResponse.IsSuccessStatusCode && parsedResponse != null)
             {
-                var messageUuid = parsedResponse?["message_uuid"]?[0]?.ToString();
-                if (!string.IsNullOrEmpty(messageUuid))
-                {
-                    return new SmsResponse { Success = true, MessageId = messageUuid };
-                }
+                return new SmsResponse { Success = true, MessageId = parsedResponse.Sid };
             }
 
             // Handle error response
-            var errorMessage = parsedResponse?["error"]?.ToString() ?? "Unknown error";
-            var errorCode = MapPlivoErrorFromResponse(parsedResponse, httpResponse.StatusCode);
+            var errorMessage =
+                parsedResponse?.Message ?? "Unknown error occurred while sending SMS";
+            var errorCode = MapTwilioErrorCode(parsedResponse?.Code, httpResponse.StatusCode);
 
             return new SmsResponse
             {
@@ -108,7 +118,7 @@ public class PlivoSmsProvider : ISmsProvider
             {
                 Success = false,
                 ErrorCode = "PROVIDER_ERROR",
-                ErrorMessage = $"Plivo provider error: {ex.Message}",
+                ErrorMessage = $"Twilio provider error: {ex.Message}",
             };
         }
     }
@@ -159,18 +169,32 @@ public class PlivoSmsProvider : ISmsProvider
         return null;
     }
 
-    private static string MapPlivoErrorFromResponse(
-        dynamic response,
-        System.Net.HttpStatusCode statusCode
-    )
+    private static string MapTwilioErrorCode(int? twilioCode, System.Net.HttpStatusCode statusCode)
     {
-        // Map based on status code
+        // Twilio-specific error code mapping
+        return twilioCode switch
+        {
+            21211 => "INVALID_PHONE", // Invalid 'To' Phone Number
+            21408 => "OPTED_OUT", // Permission to send an SMS has not been enabled
+            21610 => "OPTED_OUT", // Attempt to send to unsubscribed recipient
+            30003 => "OPTED_OUT", // Unreachable destination handset
+            30005 => "INVALID_PHONE", // Unknown destination handset
+            30006 => "CARRIER_VIOLATION", // Landline or unreachable carrier
+            30007 => "CARRIER_VIOLATION", // Carrier violation
+            30008 => "INVALID_PHONE", // Unknown error
+            _ => MapByStatusCode(statusCode),
+        };
+    }
+
+    private static string MapByStatusCode(System.Net.HttpStatusCode statusCode)
+    {
         return statusCode switch
         {
             System.Net.HttpStatusCode.BadRequest => "INVALID_PHONE",
             System.Net.HttpStatusCode.Unauthorized => "PROVIDER_ERROR",
             System.Net.HttpStatusCode.Forbidden => "OPTED_OUT",
             System.Net.HttpStatusCode.NotFound => "PROVIDER_ERROR",
+            System.Net.HttpStatusCode.TooManyRequests => "RATE_LIMITED",
             System.Net.HttpStatusCode.InternalServerError => "PROVIDER_ERROR",
             System.Net.HttpStatusCode.ServiceUnavailable => "PROVIDER_ERROR",
             _ => "PROVIDER_ERROR",
@@ -181,5 +205,14 @@ public class PlivoSmsProvider : ISmsProvider
     {
         var e164Regex = new Regex(@"^\+[1-9]\d{1,14}$");
         return e164Regex.IsMatch(phoneNumber);
+    }
+
+    // Twilio API response model
+    private class TwilioResponse
+    {
+        public string? Sid { get; set; }
+        public string? Status { get; set; }
+        public int? Code { get; set; }
+        public string? Message { get; set; }
     }
 }

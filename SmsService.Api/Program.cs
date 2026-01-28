@@ -16,23 +16,25 @@ Log.Logger = new LoggerConfiguration()
 
 builder.Host.UseSerilog();
 
-// Add services
 builder.Services.AddHealthChecks();
 builder.Services.ConfigureApiServices(builder.Configuration);
 
-// Register Plivo provider
-var plivoConfig = builder.Configuration.GetSection("Plivo");
-builder.Services.AddSingleton<ISmsProvider>(
-    new PlivoSmsProvider(
-        plivoConfig["AuthId"],
-        plivoConfig["AuthToken"],
-        plivoConfig["SenderNumber"]
-    )
-);
+// Add Swagger
+builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSwaggerGen();
 
 var app = builder.Build();
 
+// Configure Swagger
+if (!app.Environment.IsProduction())
+{
+    app.UseSwagger();
+    app.UseSwaggerUI();
+}
+
 // Configure middleware
+app.MapControllers();
+
 app.MapHealthChecks(
     "/healthz/ready",
     new HealthCheckOptions { Predicate = healthCheck => healthCheck.Tags.Contains("ready") }

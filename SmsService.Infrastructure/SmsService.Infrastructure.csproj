@@ -1,5 +1,4 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
-
   <ItemGroup>
     <ProjectReference Include="..\SmsService.Core\SmsService.Core.csproj" />
     <ProjectReference Include="..\SmsService.Domain\SmsService.Domain.csproj" />
@@ -15,5 +14,4 @@
     <Nullable>enable</Nullable>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
   </PropertyGroup>
-
 </Project>

@@ -1,6 +1,8 @@
 using Microsoft.EntityFrameworkCore;
 using Newtonsoft.Json.Converters;
+using SmsService.Core.Interfaces;
 using SmsService.Domain.Data;
+using SmsService.Infrastructure.Services;
 
 namespace SmsService.Api.Configuration;
 
@@ -23,6 +25,20 @@ public static class ServiceConfiguration
 
         // Add health checks
         services.AddHealthChecks();
+
+        // Register SMS Provider with HttpClient
+        services.AddHttpClient();
+        services.AddScoped<ISmsProvider>(serviceProvider =>
+        {
+            var httpClientFactory = serviceProvider.GetRequiredService<IHttpClientFactory>();
+            var httpClient = httpClientFactory.CreateClient();
+
+            var accountSid = configuration["Twilio:AccountSid"];
+            var authToken = configuration["Twilio:AuthToken"];
+            var senderNumber = configuration["Twilio:SenderNumber"];
+
+            return new TwilioSmsProvider(httpClient, accountSid, authToken, senderNumber);
+        });
 
         // Register DbContext
         services.AddDbContext<SmsDbContext>(options =>
