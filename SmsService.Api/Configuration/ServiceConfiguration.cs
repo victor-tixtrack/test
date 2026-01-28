@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using SmsService.Core.Interfaces;
 using Newtonsoft.Json.Converters;
 using SmsService.Domain.Data;
+using SmsService.Infrastructure.Services;
 
 namespace SmsService.Api.Configuration;
 
@@ -25,8 +26,22 @@ public static class ServiceConfiguration
         // Add health checks
         services.AddHealthChecks();
 
-        // Register controllers
-        services.AddControllers();
+        // Register NoOp SMS Provider for testing
+        services.AddScoped<ISmsProvider, NoOpSmsProvider>();
+
+        // Register SMS Provider with HttpClient (commented out)
+        // services.AddHttpClient();
+        // services.AddScoped<ISmsProvider>(serviceProvider =>
+        // {
+        //     var httpClientFactory = serviceProvider.GetRequiredService<IHttpClientFactory>();
+        //     var httpClient = httpClientFactory.CreateClient();
+        //
+        //     var accountSid = configuration["Twilio:AccountSid"];
+        //     var authToken = configuration["Twilio:AuthToken"];
+        //     var senderNumber = configuration["Twilio:SenderNumber"];
+        //
+        //     return new TwilioSmsProvider(httpClient, accountSid, authToken, senderNumber);
+        // });
 
         // Register DbContext
         services.AddDbContext<SmsDbContext>(options =>
@@ -39,16 +54,6 @@ public static class ServiceConfiguration
                         errorNumbersToAdd: null
                     )
             )
-        );
-
-        // Auto-register services using Scrutor (excluding providers that need configuration)
-        services.Scan(scan =>
-            scan.FromApplicationDependencies()
-                .AddClasses(classes =>
-                    classes.AssignableTo<ISmsProvider>().Where(type => !type.Name.Contains("Plivo"))
-                )
-                .AsImplementedInterfaces()
-                .WithScopedLifetime()
         );
 
         return services;

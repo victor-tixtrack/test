@@ -19,15 +19,18 @@ builder.Host.UseSerilog();
 // Add services
 builder.Services.ConfigureApiServices(builder.Configuration);
 
-// Manually register Plivo provider with configuration (commented out)
-// var plivoConfig = builder.Configuration.GetSection("Plivo");
-// builder.Services.AddScoped<ISmsProvider>(sp => new PlivoSmsProvider(
-//     plivoConfig["AuthId"],
-//     plivoConfig["AuthToken"],
-//     plivoConfig["SenderNumber"]
-// ));
+// Add Swagger
+builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSwaggerGen();
 
 var app = builder.Build();
+
+// Configure Swagger
+if (!app.Environment.IsProduction())
+{
+    app.UseSwagger();
+    app.UseSwaggerUI();
+}
 
 // Configure middleware
 app.MapControllers();
@@ -55,3 +58,6 @@ app.MapPost(
 app.Run();
 
 Log.CloseAndFlush();
+
+// Make Program class accessible to integration tests
+public partial class Program { }
