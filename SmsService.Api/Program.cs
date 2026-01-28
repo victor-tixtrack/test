@@ -19,17 +19,19 @@ builder.Host.UseSerilog();
 // Add services
 builder.Services.ConfigureApiServices(builder.Configuration);
 
-// Manually register Plivo provider with configuration
-var plivoConfig = builder.Configuration.GetSection("Plivo");
-builder.Services.AddScoped<ISmsProvider>(sp => new PlivoSmsProvider(
-    plivoConfig["AuthId"],
-    plivoConfig["AuthToken"],
-    plivoConfig["SenderNumber"]
-));
+// Manually register Plivo provider with configuration (commented out)
+// var plivoConfig = builder.Configuration.GetSection("Plivo");
+// builder.Services.AddScoped<ISmsProvider>(sp => new PlivoSmsProvider(
+//     plivoConfig["AuthId"],
+//     plivoConfig["AuthToken"],
+//     plivoConfig["SenderNumber"]
+// ));
 
 var app = builder.Build();
 
 // Configure middleware
+app.MapControllers();
+
 app.MapHealthChecks(
     "/healthz/ready",
     new HealthCheckOptions { Predicate = healthCheck => healthCheck.Tags.Contains("ready") }
