@@ -27,7 +27,6 @@ public class TwilioSmsProvider : ISmsProvider
         _senderNumber = senderNumber ?? Environment.GetEnvironmentVariable("TWILIO_SENDER_NUMBER");
     }
 
-    // Parameterless constructor for backward compatibility
     public TwilioSmsProvider()
         : this(new HttpClient()) { }
 
