@@ -20,6 +20,10 @@ builder.Host.UseSerilog();
 builder.Services.AddHealthChecks();
 builder.Services.ConfigureApiServices(builder.Configuration);
 
+// Add Swagger
+builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSwaggerGen();
+
 // Register Plivo provider
 var plivoConfig = builder.Configuration.GetSection("Plivo");
 builder.Services.AddSingleton<ISmsProvider>(
@@ -31,6 +35,13 @@ builder.Services.AddSingleton<ISmsProvider>(
 );
 
 var app = builder.Build();
+
+// Configure Swagger
+if (!app.Environment.IsProduction())
+{
+    app.UseSwagger();
+    app.UseSwaggerUI();
+}
 
 // Configure middleware
 app.MapHealthChecks(
