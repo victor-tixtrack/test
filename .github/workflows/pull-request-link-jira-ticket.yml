@@ -15,7 +15,7 @@ jobs:
       continue-on-error: true
       with:
         repo-token: "${{ secrets.GITHUB_TOKEN }}"
-        head-branch-regex: 'nlvn-[\d]+'
+        head-branch-regex: 'nlvn-\d+.*'
         title-template: ' [%headbranch%]'
         body-template: |
           Jira ticket: [%headbranch%](https://tixtrack.atlassian.net/browse/%headbranch%)
