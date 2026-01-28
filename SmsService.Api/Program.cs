@@ -17,18 +17,15 @@ Log.Logger = new LoggerConfiguration()
 builder.Host.UseSerilog();
 
 // Add services
-builder.Services.AddHealthChecks();
 builder.Services.ConfigureApiServices(builder.Configuration);
 
-// Register Plivo provider
+// Manually register Plivo provider with configuration
 var plivoConfig = builder.Configuration.GetSection("Plivo");
-builder.Services.AddSingleton<ISmsProvider>(
-    new PlivoSmsProvider(
-        plivoConfig["AuthId"],
-        plivoConfig["AuthToken"],
-        plivoConfig["SenderNumber"]
-    )
-);
+builder.Services.AddScoped<ISmsProvider>(sp => new PlivoSmsProvider(
+    plivoConfig["AuthId"],
+    plivoConfig["AuthToken"],
+    plivoConfig["SenderNumber"]
+));
 
 var app = builder.Build();
 

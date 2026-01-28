@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using SmsService.Core.Interfaces;
 using SmsService.Domain.Data;
 
 namespace SmsService.Api.Configuration;
@@ -16,6 +17,9 @@ public static class ServiceConfiguration
         // Add health checks
         services.AddHealthChecks();
 
+        // Register controllers
+        services.AddControllers();
+
         // Register DbContext
         services.AddDbContext<SmsDbContext>(options =>
             options.UseSqlServer(
@@ -27,6 +31,16 @@ public static class ServiceConfiguration
                         errorNumbersToAdd: null
                     )
             )
+        );
+
+        // Auto-register services using Scrutor (excluding providers that need configuration)
+        services.Scan(scan =>
+            scan.FromApplicationDependencies()
+                .AddClasses(classes =>
+                    classes.AssignableTo<ISmsProvider>().Where(type => !type.Name.Contains("Plivo"))
+                )
+                .AsImplementedInterfaces()
+                .WithScopedLifetime()
         );
 
         return services;
