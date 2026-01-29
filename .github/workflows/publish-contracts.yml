@@ -1,0 +1,33 @@
+name: Publish SmsService Contracts Package
+
+on:
+
+  workflow_dispatch:
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v3
+        with:
+          dotnet-version: '10.0.x'
+      
+      - name: Setup NuGet
+        run: dotnet nuget add source --username USERNAME --password ${{ secrets.GITHUB_TOKEN }} --store-password-in-clear-text --name github "https://nuget.pkg.github.com/ripberge/index.json"
+      
+      - name: Build
+        run: dotnet build SmsService.Contracts/SmsService.Contracts.csproj
+      
+      - name: Pack
+        run: dotnet pack SmsService.Contracts/SmsService.Contracts.csproj -c Release -p:PackageVersion=1.0.${{ github.run_number }} -o ./artifacts
+      
+      - name: Push to GitHub Packages
+        run: dotnet nuget push ./artifacts/*.nupkg -k ${GITHUB_TOKEN} -s https://nuget.pkg.github.com/ripberge/index.json --skip-duplicate --no-symbols
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
